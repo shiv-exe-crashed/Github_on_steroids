@@ -7,6 +7,13 @@ All notable changes are listed here. This project follows
 
 ### Added
 
+- Adding and removing profiles without starting over. Running
+  `install-mac.command` again shows a menu (add, remove, start over,
+  refresh). `ghdp add` asks only about the new profile and leaves the others
+  unchanged; `ghdp remove [name]` removes one and keeps its data unless you
+  choose the Trash. A removed profile's name can't be reused while its old
+  data is still there.
+
 - `ghdp allow <profile> <owner/repo>`: let one profile commit and push to one
   repo of an owner it does not use (for example a teammate's repo), without
   opening up the rest of that owner. New optional `"repos"` list in

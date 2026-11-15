@@ -15,7 +15,7 @@ And a guard that **stops wrong-account commits before they happen.**
 ![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![No network calls](https://img.shields.io/badge/network%20calls-0-brightgreen)
 ![shellcheck](https://img.shields.io/badge/shellcheck-0%20warnings-blue)
-![Tests](https://img.shields.io/badge/tests-86%20passing-success)
+![Tests](https://img.shields.io/badge/tests-112%20passing-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 [**⚡ Install in 2 minutes**](#-install-in-2-minutes) ·
@@ -32,7 +32,7 @@ And a guard that **stops wrong-account commits before they happen.**
 
 <div align="center">
 
-| 🧪 **86** automated tests | 🧨 **5** attack tests | 💬 **73** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
+| 🧪 **112** automated tests | 🧨 **5** attack tests | 💬 **79** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 
 </div>
@@ -166,6 +166,17 @@ In Finder press **Shift + Cmd + H**, open **Applications**, and double-click
 
 New profiles sign in once: see [first sign-in](#-first-sign-in). That's it. 🎉
 
+### ➕ Adding another account later
+
+Double-click **`install-mac.command`** again and press **Return** (the first
+choice, **1) Add a profile**). You are asked only about the new account: a
+name, its commit email, and its GitHub owner. **Your other profiles are not
+asked about and not changed.** Then open the new launcher and sign in once.
+
+Terminal users: `mac/ghdp add`. To take an account away: choose **2** in the
+same menu, or run `mac/ghdp remove <name>` (its data is kept unless you ask
+for the Trash).
+
 ---
 
 ## 🧭 Setup questions explained
@@ -175,7 +186,7 @@ password here: you sign in later, inside GitHub Desktop.
 
 | The wizard asks | What it means | What to type |
 |---|---|---|
-| **Start a new setup?** *(only if you already have profiles)* | Replace your profiles. Your old settings are backed up. | **n** keeps your profiles and reinstalls the launchers. **y** starts over. |
+| **What do you want to do?** *(only if you already have profiles)* | A small menu: **1** adds a profile (only the new one is asked about), **2** removes one, **3** starts over and replaces all, **4** just refreshes the launchers. | **1** to add an account |
 | **Copy them into your first profile…?** *(only if GitHub Desktop is already set up)* | Turn your current GitHub Desktop (its login and repo list) into your first profile, so that account doesn't sign in again. The original is never changed. | **y** (recommended) |
 | **Name for profile 1** | A short name for this profile. It becomes the launcher name, e.g. "GitHub Desktop - work". | `work`, `personal`, `opensource`… (letters, numbers, `-` and `_`) |
 | **Name on commits** | The author name shown on commits from this profile. | Your name |
@@ -296,6 +307,9 @@ handled on purpose. Almost all are covered by automated tests; the rest
 | A typo in a setting (`gitEmial`) | Refused with a clear message, never silently ignored. |
 | Wrong types, nested objects, line breaks in settings | Each is refused with a message that says what to fix (21 broken-config cases tested). |
 | Setup run twice | Nothing breaks or doubles up. Settings GitHub Desktop added to a profile are kept. |
+| You add a profile later | Your other profiles are not asked about again and not changed: logins, repos, settings and guard rules stay. |
+| You remove a profile | Its launcher and guard rules go. Its data stays on your Mac unless you choose the Trash, and never while its window is open. |
+| A removed profile's name is added again | Refused while its old data is still there, so a new account can never inherit an old login by accident. |
 | Setup cancelled before you confirm | Nothing is written. |
 | A copy interrupted halfway | The partial copy never counts as profile data. |
 | GitHub Desktop still open while copying | Setup waits until it's closed, so the data is complete. |
@@ -369,7 +383,9 @@ The launchers are all you need day to day. For everything else:
 
 | Command | What it does |
 |---|---|
-| `bash install-mac.command` | Guided setup. Run it again to add, rename or remove profiles. |
+| `bash install-mac.command` | Guided setup. With profiles already there it shows a menu: add, remove, start over, refresh. |
+| `mac/ghdp add` | Add one more profile; the others stay as they are |
+| `mac/ghdp remove [name]` | Remove a profile (its data is kept unless you choose the Trash) |
 | `mac/ghdp list` | Your profiles, their guard rules, and a health check |
 | `mac/ghdp allow <name> <owner/repo>` | Let a profile use one repo of an owner it doesn't use |
 | `mac/ghdp install` | Rebuild launchers after editing your profiles by hand |
@@ -400,8 +416,8 @@ Optional per profile: `"folders": ["~/work"]`, `"owners": [...]` and
 </details>
 
 **Updating:** pull the latest version (in GitHub Desktop: **Fetch** → **Pull**),
-then double-click `install-mac.command` and answer **n** to "Start a new
-setup?". Your launchers are refreshed and your profiles stay.
+then double-click `install-mac.command` and choose **4** ("Nothing, just
+refresh the launchers"). Your launchers are refreshed and your profiles stay.
 
 ---
 
@@ -441,6 +457,16 @@ affected. For a repo whose owner your profile doesn't use, run
 [Working on a repo that belongs to someone else's account](#-working-on-a-repo-that-belongs-to-someone-elses-account).
 Everything under an owner your profile **does** use (for example your whole
 company organization) works without any extra step.
+</details>
+
+<details>
+<summary><b>How do I add another account later?</b></summary>
+
+Double-click `install-mac.command` again and choose **1) Add a profile**. You
+are asked only about the new account (name, email, owners). Your other
+profiles are not touched. Then open the new launcher and sign in once. From
+Terminal: `mac/ghdp add`. To take one away: choose **2**, or run
+`mac/ghdp remove <name>`.
 </details>
 
 <details>
