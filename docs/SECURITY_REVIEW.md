@@ -12,16 +12,16 @@ to break every security rule of the project.
 
 | Rule | Result |
 |---|---|
-| Never see, store, log, print or send tokens | ✅ No code touches the Keychain. Import skips cookies and copies no tokens. Remote URLs are shown without `user:token@`. |
-| No network calls, telemetry or auto-update | ✅ Enforced by `scripts/check-policy.sh` in CI and in the pre-commit hook. |
-| Least privilege | ✅ No sudo. Settings go only to the GitHub Desktop process. `~/.gitconfig` is never edited. |
-| Private data folders | ✅ `700`/`600`, ACLs removed, checked and fixed on every run. |
-| Strict input, no injection or path tricks | ✅ Tested with `../`, `-rf`, `$(...)`, backticks, newlines, device names and links. |
-| No eval, no downloading or running code | ✅ Enforced by the policy check. |
-| Linters clean | ✅ shellcheck: zero findings at style level, including the generated hook. |
-| Signature check before launch | ✅ Pinned Team ID and bundle id, `--deep --strict`. |
-| Wrong-account protection | ✅ Identity forced per profile, guard on commit and push. Also tested by hand in GitHub Desktop with two real accounts. |
-| Clean, reversible uninstall | ✅ Data goes to the Trash only on yes. The normal GitHub Desktop data and tokens are never touched. |
+| Never see, store, log, print or send tokens | Yes: No code touches the Keychain. Import skips cookies and copies no tokens. Remote URLs are shown without `user:token@`. |
+| No network calls, telemetry or auto-update | Yes: Enforced by `scripts/check-policy.sh` in CI and in the pre-commit hook. |
+| Least privilege | Yes: No sudo. Settings go only to the GitHub Desktop process. `~/.gitconfig` is never edited. |
+| Private data folders | Yes: `700`/`600`, ACLs removed, checked and fixed on every run. |
+| Strict input, no injection or path tricks | Yes: Tested with `../`, `-rf`, `$(...)`, backticks, newlines, device names and links. |
+| No eval, no downloading or running code | Yes: Enforced by the policy check. |
+| Linters clean | Yes: shellcheck: zero findings at style level, including the generated hook. |
+| Signature check before launch | Yes: Pinned Team ID and bundle id, `--deep --strict`. |
+| Wrong-account protection | Yes: Identity forced per profile, guard on commit and push. Also tested by hand in GitHub Desktop with two real accounts. |
+| Clean, reversible uninstall | Yes: Data goes to the Trash only on yes. The normal GitHub Desktop data and tokens are never touched. |
 
 ## Findings and fixes
 
