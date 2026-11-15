@@ -570,6 +570,13 @@ itself is never changed, and the copy must pass the same GitHub signature
 check. It is made again when GitHub Desktop updates. If a copy can't be made,
 the profile simply opens with GitHub Desktop's normal icon. To skip the copy,
 run `mac/ghdp launch <name> --plain`.
+
+*Good to know:* only the **icon** is different. The name in the menu bar,
+Cmd + Tab and Mission Control still says "GitHub Desktop". macOS reads that
+name from files that are part of the app's security seal. Changing it breaks
+the seal, and macOS then refuses to open the app ("damaged and can't be
+opened"). We tried it and dropped it on purpose. To tell windows apart, use the
+Dock icon and give each profile its own theme (Light or Dark).
 </details>
 
 <details>
