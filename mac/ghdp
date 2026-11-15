@@ -801,6 +801,9 @@ check_owner() {
     *[!a-z0-9-]*) stop "Could not read the GitHub owner of the remote $(safe_url "$1")." \
       "Fix the remote URL in this repo, then try again." ;;
   esac
+  # Checks use lower case; messages show the owner as the remote writes it
+  # (only letters, digits and "-", because its lower-case form passed above).
+  shown=${rpath%%/*}
   # A repo the user allowed for this profile with "ghdp allow".
   repo=$(repo_of "$1")
   if [ -n "$repo" ] && rule repo | grep -qxF -- "$repo"; then return 0; fi
@@ -812,12 +815,12 @@ check_owner() {
   if [ -n "$owners" ] && printf '%s\n' "$owners" | grep -qxF -- "$o"; then return 0; fi
   other=$(other_profile_for_owner "$o")
   if [ -n "$other" ]; then
-    stop "The remote $(safe_url "$1") belongs to \"$o\", which is set for the \"$other\" profile." \
+    stop "The remote $(safe_url "$1") belongs to \"$shown\", which is set for the \"$other\" profile." \
       "Open this repo in \"GitHub Desktop - $other\" instead." \
       "$hint"
   fi
   if [ -n "$owners" ]; then
-    stop "The remote $(safe_url "$1") belongs to \"$o\", which this profile does not use." \
+    stop "The remote $(safe_url "$1") belongs to \"$shown\", which this profile does not use." \
       "This profile is for: $(printf '%s' "$owners" | tr '\n' ' ')" \
       "Open the right GitHub Desktop profile." \
       "$hint"
@@ -1456,11 +1459,14 @@ owner_from_email() {
   if valid_owner "$l"; then printf '%s' "$l"; fi
 }
 
-# Quick setup for a first profile: show the guessed answers and ask once.
+# Quick setup for a first profile, after you confirmed which account your
+# GitHub Desktop uses: show the answers and ask once. $1 = name on commits,
+# $2 = email, $3 = the GitHub account (also the profile name).
 quick_confirm() {
   say ""
   say "Quick setup. Your current GitHub Desktop becomes your first profile:"
-  say "  name:     personal   (the launcher will be called \"GitHub Desktop - personal\")"
+  say "  account:  $3 (the account your GitHub Desktop is signed in to)"
+  say "  name:     $3   (the launcher will be called \"GitHub Desktop - $3\")"
   say "  commits:  $1 <$2>"
   say "  guard:    keeps the GitHub owner \"$3\" apart from your other accounts"
   ask_yes "Does this look right? (say n to choose these yourself)" y
@@ -1473,9 +1479,26 @@ open_after() {
   cmd_launch "$1"
 }
 
+# Show the launchers in Finder. They are in the Applications folder inside
+# your home folder, which Finder's sidebar and Launchpad do not show.
+reveal_launchers() {
+  local l
+  l="$(launcher_path "$1")" || return 0
+  [ -d "$l" ] || return 0
+  say "Showing your launchers in Finder."
+  /usr/bin/open -R "$l" || true
+}
+
+# The last steps of setup and add: offer to open the profile, then show
+# where its launcher is.
+after_setup() {
+  open_after "$1"
+  reveal_launchers "$1"
+}
+
 # Only when a person is typing (not in scripts or tests).
 offer_open() {
-  if [ -t 0 ]; then open_after "$1"; fi
+  if [ -t 0 ]; then after_setup "$1"; fi
 }
 
 # What to do when you already have profiles. Returns 0 only for "start
@@ -1503,6 +1526,7 @@ setup_menu() {
 
 cmd_setup() {
   local app cfg def_name def_email owner n gname gemail import="" last i pd dd
+  local quick=0 copy_email spare_email=""
   [ "$#" -eq 0 ] || die "setup does not take options." "Run: ghdp setup"
   check_home
   say "GitHub Desktop Profiles setup"
@@ -1538,24 +1562,43 @@ cmd_setup() {
   valid_git_name "$def_name" || def_name=""
   def_email="$(global_git_value user.email "$app")"
   valid_email "$def_email" || def_email=""
+  copy_email="$def_email"
 
   if [ -d "$(normal_data_dir)" ] && [ ! -L "$(normal_data_dir)" ]; then
     say ""
     say "Your current GitHub Desktop already has a login and a repo list."
+    say "To see which GitHub account it uses: open GitHub Desktop > Settings > Accounts."
     say "(Its WHOLE repo list is copied. If it holds repos of another account, you"
     say "remove them from this profile afterwards; setup tells you how.)"
     if ask_yes "Copy them into your first profile, so that account does not need to sign in again?" y; then
+      # Your Git email names a GitHub account, but GitHub Desktop may be
+      # signed in to another one, and this tool does not read its login.
+      # So you check, and Return alone is not an answer.
       owner="$(owner_from_email "$def_email")"
-      if [ -n "$def_name" ] && [ -n "$owner" ] && [ ! -e "$(data_dir personal)" ] &&
-        quick_confirm "$def_name" "$def_email" "$owner"; then
-        n=personal
+      if [ -n "$owner" ]; then
+        say ""
+        say "Your Git email $def_email belongs to the GitHub account \"$owner\"."
+        if ask_yes "Is your current GitHub Desktop signed in to \"$owner\"? Check in GitHub Desktop > Settings > Accounts" ""; then
+          # Quick only if the account name can be the profile name.
+          if [ -n "$def_name" ] && valid_name "$owner" && [ ! -e "$(data_dir "$owner")" ] &&
+            quick_confirm "$def_name" "$def_email" "$owner"; then quick=1; fi
+        else
+          say "Then give this profile the email of the account GitHub Desktop is signed in to."
+          say "Your Git email is offered for your next profile instead."
+          copy_email=""
+          spare_email="$def_email"
+        fi
+      fi
+      if [ "$quick" = "1" ]; then
+        n="$owner"
         add_wizard_profile "$n" "$def_name" "$def_email"
         W_FOLDERS+=("")
         W_OWNERS+=("$owner")
       else
         n="$(ask_profile_name 1 new)" || exit 1
         gname="$(ask_git_name "$def_name")" || exit 1
-        gemail="$(ask_email "$def_email")" || exit 1
+        gemail="$(ask_email "$copy_email")" || exit 1
+        if [ "$gemail" = "$spare_email" ]; then spare_email=""; fi
         add_wizard_profile "$n" "$gname" "$gemail"
         ask_rules
       fi
@@ -1574,7 +1617,8 @@ cmd_setup() {
     fi
     n="$(ask_profile_name $((${#W_NAMES[@]} + 1)))" || exit 1
     gname="$(ask_git_name "$last")" || exit 1
-    gemail="$(ask_email "")" || exit 1
+    gemail="$(ask_email "$spare_email")" || exit 1
+    spare_email=""
     add_wizard_profile "$n" "$gname" "$gemail"
     ask_rules
   done
@@ -1812,8 +1856,10 @@ cmd_install() {
   done
   if [ "$INSTALL_QUIET" != "1" ]; then
     say ""
-    say "Done. In Finder, open your home folder > Applications and double-click"
-    say "\"GitHub Desktop - ${P_NAMES[0]}\"."
+    say "Done. Your launchers are in $HOME/Applications."
+    say "That is the Applications folder inside your home folder, NOT the main Applications folder."
+    say "Finder's sidebar and Launchpad do not show it. To open a profile, press Cmd+Space"
+    say "and type \"GitHub Desktop - ${P_NAMES[0]}\", or in Finder choose Go > Home, then Applications."
     say "Tip: sign in to each profile while it is the only GitHub Desktop window open."
   fi
 }
@@ -1839,10 +1885,13 @@ move_to_trash() {
 # Trash only if you say yes. Never touches your normal GitHub Desktop data,
 # your code folders or any saved login (token).
 cmd_uninstall() {
-  local base app n=0 answer
+  local base app n=0 answer download
   [ "$#" -eq 0 ] || die "uninstall does not take options." "Run: ghdp uninstall"
   check_home
   base="$(base_dir)"
+  # The project folder you downloaded or cloned, when this runs from it (not
+  # from the installed copy, which is removed below). Read now, before then.
+  download="$(/usr/bin/dirname "$(/usr/bin/dirname "$(script_path)")")" || exit 1
   say "GitHub Desktop Profiles uninstall"
   say "Your normal GitHub Desktop, your code folders and your GitHub accounts are not touched."
   if ! ask_yes "Remove the profile launchers and this tool?" n; then
@@ -1881,6 +1930,11 @@ cmd_uninstall() {
   say ""
   say "Saved logins (tokens) stay in your Keychain, because GitHub Desktop stores them by account."
   say "To remove one, sign out of that account inside GitHub Desktop, but only if no other window uses it."
+  if [ -f "$download/install-mac.command" ] && [ -f "$download/uninstall-mac.command" ]; then
+    say ""
+    say "You can now delete the folder you downloaded (or cloned): $download"
+    say "Delete the .zip file too, if you used the one-line install. Nothing needs them any more."
+  fi
 }
 
 # A private copy of GitHub Desktop for one profile, so the Dock can show the

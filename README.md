@@ -10,7 +10,7 @@ and a guard that stops wrong-account commits before they happen.
 
 [![CI](https://github.com/shiv-exe-crashed/Github_on_steroids/actions/workflows/ci.yml/badge.svg)](https://github.com/shiv-exe-crashed/Github_on_steroids/actions/workflows/ci.yml)
 ![macOS 12+](https://img.shields.io/badge/macOS-12%2B-000000?logo=apple&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-141%20passing-success)
+![Tests](https://img.shields.io/badge/tests-147%20passing-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 </div>
@@ -79,7 +79,7 @@ Example for a personal and a work account (use your own names and emails):
 
 | The setup asks | You type |
 |---|---|
-| Copy them into your first profile? | `y` if GitHub Desktop is signed in today |
+| Copy them into your first profile? | `y` if GitHub Desktop is signed in today. To see which account: in GitHub Desktop, **Settings, Accounts** |
 | Name for profile 1 | `personal` |
 | Email on commits | your GitHub noreply email (see the tip) |
 | Folders | press **Return** to skip |
@@ -87,8 +87,11 @@ Example for a personal and a work account (use your own names and emails):
 | Add another profile? | `y`, then `work`, `you@company.com`, `your-company` |
 | Create these profiles? | `y` |
 
-If GitHub Desktop is signed in and your Git email is your GitHub noreply
-email, the setup shows a quick summary instead: press **Return** once.
+If your Git email is a GitHub noreply email, the setup first asks whether
+GitHub Desktop is signed in to that same account (check **Settings, Accounts**
+in GitHub Desktop). Type `y` and it shows a quick summary: press **Return**
+once. Type `n` and you answer each question, and your Git email is offered for
+your next profile instead.
 
 **Tip, which email?** Use your GitHub noreply email so your real address never
 shows in public commits: on github.com open **Settings, Emails**, tick **Keep
@@ -103,9 +106,12 @@ Every question is explained in [docs/USAGE.md](docs/USAGE.md).
 <img src="docs/assets/launchers.svg" alt="The Applications folder in your home folder with one launcher per account" width="80%">
 </div>
 
-The setup offers to open your first profile. Later, open any launcher from
-your Applications folder, or press **Cmd + Space** and type its name. Each new
-profile signs in once:
+The launchers are in the **Applications folder inside your home folder**
+(`~/Applications`), **not** the main Applications folder. Finder's sidebar and
+Launchpad don't show that folder, so at the end the setup offers to open your
+first profile and then shows the launchers in Finder. Later, press **Cmd + Space** and type
+the launcher's name, or in Finder choose **Go, Home**, then **Applications**.
+Each new profile signs in once:
 
 1. In your browser, check you are on the right GitHub account.
 2. Close every other GitHub Desktop window.
@@ -243,6 +249,10 @@ the launchers, the tool and the private copies, and asks whether to move your
 profile data to the Trash. Your normal GitHub Desktop, your code and your GitHub
 accounts are never touched. Saved logins stay in your Keychain: to remove one,
 sign out inside that profile first.
+
+When it is done, you can delete the folder you downloaded or cloned (and
+`Github_on_steroids.zip` in Downloads, if you used the install line). Nothing
+needs them any more.
 
 ## Troubleshooting
 

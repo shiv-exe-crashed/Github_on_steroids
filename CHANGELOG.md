@@ -3,6 +3,28 @@
 All notable changes are listed here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Quick setup no longer guesses which account your GitHub Desktop uses. Before,
+  it went by your Git email only. If GitHub Desktop was signed in to another
+  account, it offered to copy that account into a profile that commits with
+  the wrong email. Now it asks you to check (GitHub Desktop, Settings,
+  Accounts), with no default answer. If you say no, the copied profile does
+  not get your Git email; it is offered for your next profile instead.
+- Quick setup names the profile after the GitHub account instead of always
+  calling it `personal`.
+- The copy question says where to see which account GitHub Desktop uses.
+- The guard shows a remote's GitHub owner as the remote writes it
+  (`Harry-kp`, not `harry-kp`).
+
+### Changed
+
+- The end of setup says plainly that the launchers are in the Applications
+  folder inside your home folder, not the main one, and shows them in Finder.
+- Uninstall says you can now delete the folder you downloaded or cloned.
+
 ## [0.1.0] - 2026-11-15
 
 First public release, for macOS.

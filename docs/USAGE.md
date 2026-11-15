@@ -10,8 +10,9 @@ password here: you sign in later, inside GitHub Desktop.
 | The wizard asks | What it means | What to type |
 |---|---|---|
 | **What do you want to do?** *(only if you already have profiles)* | A small menu: **1** adds a profile (only the new one is asked about), **2** removes one, **3** starts over and replaces all, **4** just refreshes the launchers. | **1** to add an account |
-| **Does this look right?** *(quick setup, only if GitHub Desktop is signed in and your Git email is a GitHub noreply email)* | A summary of the guessed answers: profile `personal`, your name and email, and your GitHub username as the guard's owner. | **y** (press **Return**). **n** lets you answer each question yourself. |
-| **Copy them into your first profile…?** *(only if GitHub Desktop is already set up)* | Turn your current GitHub Desktop (its login and repo list) into your first profile, so that account doesn't sign in again. The original is never changed. | **y** (recommended) |
+| **Copy them into your first profile…?** *(only if GitHub Desktop is already set up)* | Turn your current GitHub Desktop (its login and repo list) into your first profile, so that account doesn't sign in again. The original is never changed. To see which account it is signed in to: in GitHub Desktop, **Settings → Accounts**. | **y** (recommended) |
+| **Is your current GitHub Desktop signed in to "…"?** *(only when copying, and your Git email is a GitHub noreply email)* | Your Git email names a GitHub account, but GitHub Desktop may be signed in to a different one. The tool doesn't read GitHub Desktop's login, so you check. There is no default: type **y** or **n**. | Look in GitHub Desktop, **Settings → Accounts**. **y** if it shows that account. **n** if it shows another one: you then type the copied account's email, and your Git email is offered for your next profile. |
+| **Does this look right?** *(quick setup, after you answered y above)* | A summary: the profile is named after the GitHub account, with your name and email, and that account as the guard's owner. | **y** (press **Return**). **n** lets you answer each question yourself. |
 | **Name for profile 1** | A short name for this profile. It becomes the launcher name, e.g. "GitHub Desktop - work". | `work`, `personal`, `opensource`… (letters, numbers, `-` and `_`) |
 | **Name on commits** | The author name shown on commits from this profile. | Your name |
 | **Email on commits for this account** | The email on commits from this profile. | That account's email, e.g. its GitHub **noreply** email (github.com → Settings → Emails). |
@@ -20,7 +21,7 @@ password here: you sign in later, inside GitHub Desktop.
 | **Add GitHub owners now?** *(only if you skipped both)* | Without folders or owners, the guard can only check the email. | **y** (recommended) |
 | **Add another profile?** | Set up your next account. | **y** for each extra account, then **n** |
 | **Create these profiles?** | A last look at the summary. | **y** |
-| **Open "GitHub Desktop - …" now?** *(at the end)* | Opens the new profile for you, so you don't have to find it in Finder. | **y** (press **Return**) |
+| **Open "GitHub Desktop - …" now?** *(at the end)* | Opens the new profile for you. Then Finder shows your launchers: they are in the Applications folder **inside your home folder** (`~/Applications`), not the main one. | **y** (press **Return**) |
 | **Please quit GitHub Desktop now** *(when copying)* | The copy needs GitHub Desktop closed, so its data is complete. | Press **Cmd + Q** in GitHub Desktop, then **Return** |
 
 > [!TIP]

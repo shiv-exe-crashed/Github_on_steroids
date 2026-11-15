@@ -294,6 +294,15 @@ b"; do
   [ "$(tail -n 1 "$l/Contents/MacOS/launch")" = "exec /bin/bash \"$(bin_path)\" launch \"office\"" ]
 }
 
+@test "install says the launchers are in your home folder's Applications, not the main one" {
+  need_app
+  write_config "$GOOD"
+  run main install
+  [ "$status" -eq 0 ]
+  [[ $output == *"$HOME/Applications"* ]] || false
+  [[ $output == *"NOT the main Applications folder"* ]] || false
+}
+
 @test "install twice gives the same result (idempotent)" {
   need_app
   write_config "$GOOD"
@@ -499,7 +508,20 @@ make_foreign_app() {
   [ -d "$(data_dir office)" ]
   [ -d "$HOME/Applications/Other.app" ]
   [ "$before" = "$(cd "$(normal_data_dir)" && find . | sort | shasum)" ]
-  [[ $output == *"Keychain"* ]]
+  [[ $output == *"Keychain"* ]] || false
+  # The downloaded project folder is left alone, but you are told you can delete it.
+  [[ $output == *"You can now delete the folder you downloaded"* ]] || false
+  [[ $output == *"$(cd "$REPO" && pwd -P)"* ]] || false
+  [ -f "$REPO/mac/ghdp" ]
+}
+
+@test "uninstall from the installed copy does not point at a download folder" {
+  need_app
+  write_config "$GOOD"
+  main install >/dev/null
+  run /bin/bash "$(bin_path)" uninstall <<<$'y\nn\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output != *"You can now delete the folder you downloaded"* ]] || false
 }
 
 @test "uninstall moves profile data to the Trash only when you say yes" {
@@ -596,7 +618,8 @@ ZERO="$(printf '0%.0s' {1..40})"
   setup_guard
   new_repo "$HOME/work/evil" "git@github.com:EvilCorp/x.git"
   run as_profile office git -C "$HOME/work/evil" commit -q -m test
-  refused_with 'belongs to "evilcorp"'
+  # The owner is shown as the remote writes it, not lower-cased.
+  refused_with 'belongs to "EvilCorp"'
 }
 
 @test "guard stops a commit with the wrong email" {
@@ -863,7 +886,7 @@ teammate_commit() {
   setup_guard
   new_repo "$HOME/work/alias" "work-github:EvilCorp/x.git"
   run as_profile office git -C "$HOME/work/alias" commit -q -m test
-  refused_with 'belongs to "evilcorp"'
+  refused_with 'belongs to "EvilCorp"'
 }
 
 @test "guard allows a local remote path with spaces" {
@@ -1515,69 +1538,143 @@ write_global_git() { printf '[user]\n\tname = %s\n\temail = %s\n' "$1" "$2" >"$H
   [ -z "$(owner_from_email "")" ]
 }
 
-@test "quick setup: a signed-in GitHub Desktop with a noreply email needs only Return" {
+@test "quick setup: you confirm the account, then one Return makes a profile named after it" {
   need_app
   make_normal_data
   write_global_git "Ada L" "12345+ada-l@users.noreply.github.com"
-  run main setup <<<$'\n\nn\n\n'
+  run main setup <<<$'\ny\n\nn\n\n'
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
-  [[ $output == *"Quick setup"* ]]
-  [[ $output != *"Name for profile 1"* ]]
+  [[ $output == *"Settings > Accounts"* ]] || false
+  [[ $output == *"Your Git email 12345+ada-l@users.noreply.github.com belongs to the GitHub account \"ada-l\"."* ]] || false
+  [[ $output == *"Quick setup"* ]] || false
+  [[ $output == *"account:  ada-l"* ]] || false
+  [[ $output != *"Name for profile 1"* ]] || false
   load_config
-  [ "${P_NAMES[*]}" = "personal" ]
-  [ "${P_GIT_NAMES[0]}" = "Ada L" ] && [ "${P_GIT_EMAILS[0]}" = "12345+ada-l@users.noreply.github.com" ]
-  [ "${P_OWNERS[0]}" = "ada-l" ] && [ -z "${P_FOLDERS[0]}" ]
-  [ -f "$(data_dir personal)/Local Storage/leveldb/000003.log" ]
-  [ -d "$(launcher_path personal)" ]
-  grep -qx "owner=ada-l" "$(profile_dir personal)/guard.rules"
+  # Named after the GitHub account, not a guessed "personal".
+  [ "${P_NAMES[*]}" = "ada-l" ]
+  [ "${P_GIT_NAMES[0]}" = "Ada L" ] && [ "${P_GIT_EMAILS[0]}" = "12345+ada-l@users.noreply.github.com" ] || false
+  [ "${P_OWNERS[0]}" = "ada-l" ] && [ -z "${P_FOLDERS[0]}" ] || false
+  [ -f "$(data_dir ada-l)/Local Storage/leveldb/000003.log" ]
+  [ -d "$(launcher_path ada-l)" ]
+  grep -qx "owner=ada-l" "$(profile_dir ada-l)/guard.rules"
 }
 
-@test "quick setup: saying no lets you choose every answer yourself" {
+@test "quick setup never assumes the account: Return alone is not an answer" {
   need_app
   make_normal_data
   write_global_git "Ada L" "12345+ada-l@users.noreply.github.com"
-  run main setup <<<$'\nn\nmine\n\n\n\n\nn\nn\n\n'
+  run main setup <<<$'\n\ny\n\nn\n\n'
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
-  [[ $output == *"Quick setup"* ]]
+  [[ $output == *"Please type y or n."* ]] || false
+  load_config
+  [ "${P_NAMES[*]}" = "ada-l" ]
+}
+
+@test "quick setup: GitHub Desktop signed in to another account never gets your Git email" {
+  # GitHub Desktop is signed in to a work account, but the Git email is the
+  # personal account's noreply email. The copied profile must not take it.
+  need_app
+  make_normal_data
+  write_global_git "Ada L" "12345+ada-l@users.noreply.github.com"
+  run main setup <<<$'\nn\nwork\n\n\nada@work.example\n\n\nn\n\npersonal\n\n\n\n\nn\n\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output != *"Quick setup"* ]] || false
+  [[ $output == *"That does not look like an email address."* ]] || false
+  load_config
+  [ "${P_NAMES[*]}" = "work personal" ]
+  [ "${P_GIT_EMAILS[0]}" = "ada@work.example" ]
+  # The Git email is offered for the next profile instead.
+  [ "${P_GIT_EMAILS[1]}" = "12345+ada-l@users.noreply.github.com" ]
+  [ -f "$(data_dir work)/Local Storage/leveldb/000003.log" ]
+  [ ! -e "$(data_dir personal)/Local Storage/leveldb/000003.log" ]
+}
+
+@test "quick setup: saying no to the summary lets you choose every answer yourself" {
+  need_app
+  make_normal_data
+  write_global_git "Ada L" "12345+ada-l@users.noreply.github.com"
+  run main setup <<<$'\ny\nn\nmine\n\n\n\n\nn\nn\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *"Quick setup"* ]] || false
   load_config
   [ "${P_NAMES[*]}" = "mine" ]
+  [ "${P_GIT_EMAILS[0]}" = "12345+ada-l@users.noreply.github.com" ]
   [ -z "${P_OWNERS[0]}" ]
 }
 
-@test "quick setup is skipped without a noreply email or when personal already has data" {
+@test "quick setup is skipped without a noreply email, a usable name, or when the profile already has data" {
   need_app
   make_normal_data
   write_global_git "Ada L" "ada@example.org"
   run main setup <<<$'\npersonal\n\n\n\n\nn\nn\n\n'
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
-  [[ $output != *"Quick setup"* ]]
+  [[ $output != *"Quick setup"* ]] && [[ $output != *"belongs to the GitHub account"* ]] || false
+  # The copy question still says where to see the account.
+  [[ $output == *"To see which GitHub account it uses: open GitHub Desktop > Settings > Accounts."* ]] || false
   load_config
-  [ "${P_NAMES[*]}" = "personal" ] && [ "${P_GIT_EMAILS[0]}" = "ada@example.org" ] && [ -z "${P_OWNERS[0]}" ]
+  [ "${P_NAMES[*]}" = "personal" ] && [ "${P_GIT_EMAILS[0]}" = "ada@example.org" ] && [ -z "${P_OWNERS[0]}" ] || false
+  # The account is still checked (y here), only the quick summary is skipped.
   /bin/rm -rf "$(base_dir)"
   write_global_git "Ada L" "12345+ada-l@users.noreply.github.com"
-  mkdir -p "$(data_dir personal)"
-  run main setup <<<$'\nother\n\n\n\n\nn\nn\n\n'
+  mkdir -p "$(data_dir ada-l)"
+  run main setup <<<$'\ny\nother\n\n\n\n\nn\nn\n\n'
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
-  [[ $output != *"Quick setup"* ]]
+  [[ $output != *"Quick setup"* ]] || false
   load_config
-  [ "${P_NAMES[*]}" = "other" ]
+  [ "${P_NAMES[*]}" = "other" ] && [ "${P_GIT_EMAILS[0]}" = "12345+ada-l@users.noreply.github.com" ] || false
+  # A GitHub username too long for a profile name (33+ letters).
+  /bin/rm -rf "$(base_dir)"
+  write_global_git "Ada L" "12345+$(printf 'a%.0s' {1..33})@users.noreply.github.com"
+  run main setup <<<$'\ny\nlong\n\n\n\n\nn\nn\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output != *"Quick setup"* ]] || false
+  load_config
+  [ "${P_NAMES[*]}" = "long" ]
+}
+
+@test "the account check runs even when quick setup cannot, and a no keeps your Git email off the copy" {
+  need_app
+  make_normal_data
+  write_global_git "Ada L" "12345+ada-l@users.noreply.github.com"
+  mkdir -p "$(data_dir ada-l)"
+  run main setup <<<$'\nn\nwork\n\n\nada@work.example\n\n\nn\nn\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *"belongs to the GitHub account \"ada-l\""* ]] || false
+  [[ $output == *"That does not look like an email address."* ]] || false
+  load_config
+  [ "${P_NAMES[*]}" = "work" ] && [ "${P_GIT_EMAILS[0]}" = "ada@work.example" ] || false
+}
+
+@test "after_setup offers to open the profile, then shows the launchers in Finder" {
+  # shellcheck disable=SC2329 # called by after_setup, not by this test
+  cmd_launch() { echo "launch $1" >>"$HOME/steps"; }
+  # shellcheck disable=SC2329 # called by after_setup, not by this test
+  reveal_launchers() { echo "reveal $1" >>"$HOME/steps"; }
+  run after_setup personal <<<$'\n'
+  [ "$status" -eq 0 ]
+  [ "$(cat "$HOME/steps")" = $'launch personal\nreveal personal' ]
+  /bin/rm -f "$HOME/steps"
+  run after_setup personal <<<$'n\n'
+  [ "$status" -eq 0 ] && [ "$(cat "$HOME/steps")" = "reveal personal" ] || false
 }
 
 @test "open_after launches the profile on yes and does nothing on no" {
   # shellcheck disable=SC2329 # called by open_after, not by this test
   cmd_launch() { echo "$1" >"$HOME/launched"; }
   run open_after personal <<<$'\n'
-  [ "$status" -eq 0 ] && [ "$(cat "$HOME/launched")" = "personal" ]
+  [ "$status" -eq 0 ] && [ "$(cat "$HOME/launched")" = "personal" ] || false
   /bin/rm -f "$HOME/launched"
   run open_after personal <<<$'n\n'
-  [ "$status" -eq 0 ] && [ ! -e "$HOME/launched" ]
+  [ "$status" -eq 0 ] && [ ! -e "$HOME/launched" ] || false
 }
 
-@test "offer_open asks nobody when no person is typing (scripts, tests)" {
+@test "offer_open asks nobody and opens nothing when no person is typing (scripts, tests)" {
   # shellcheck disable=SC2329 # called by offer_open, not by this test
   cmd_launch() { echo "$1" >"$HOME/launched"; }
+  # shellcheck disable=SC2329 # called by offer_open, not by this test
+  reveal_launchers() { echo "$1" >"$HOME/revealed"; }
   run offer_open personal <<<$'\n'
-  [ "$status" -eq 0 ] && [ ! -e "$HOME/launched" ]
+  [ "$status" -eq 0 ] && [ ! -e "$HOME/launched" ] && [ ! -e "$HOME/revealed" ] || false
 }
 
 # --- experimental: a profile's own Dock icon (a private copy of GitHub Desktop)

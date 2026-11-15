@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 680" width="900" height="680" role="img" aria-label="Animated demo of the setup: one pasted line, a quick summary you accept with Return, a second account, and the new profile opens.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 760" width="900" height="760" role="img" aria-label="Animated demo of the setup: one pasted line, you confirm which account GitHub Desktop uses, a quick summary you accept with Return, a second account, the new profile opens and Finder shows the launchers.">
   <style>
     .mono { font-family: "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 17px; white-space: pre; }
     .t { fill: #c9d1d9; } .d { fill: #8b949e; } .a { fill: #79c0ff; font-weight: 700; }
@@ -8,7 +8,7 @@
     .cursor { animation: blink 1s steps(1) infinite; }
     @keyframes blink { 50% { opacity: 0; } }
   </style>
-  <rect width="900" height="680" rx="16" fill="#0d1117"/>
+  <rect width="900" height="760" rx="16" fill="#0d1117"/>
   <rect width="900" height="44" rx="16" fill="#161b22"/>
   <rect y="28" width="900" height="16" fill="#161b22"/>
   <circle cx="26" cy="22" r="7" fill="#ff5f57"/>
@@ -21,20 +21,22 @@
     <text x="28" y="118" class="l h" style="animation-delay:.9s">GitHub Desktop Profiles setup</text>
     <text x="28" y="146" class="l" style="animation-delay:1.3s"><tspan class="t">GitHub Desktop: found, and signed by GitHub. </tspan><tspan class="ok">✓</tspan></text>
     <text x="28" y="182" class="l" style="animation-delay:1.9s"><tspan class="d">Copy them into your first profile? (y/n) [y]: </tspan><tspan class="a">⏎</tspan></text>
-    <text x="28" y="218" class="l" style="animation-delay:2.6s"><tspan class="h">Quick setup.</tspan><tspan class="t"> Your GitHub Desktop becomes your first profile:</tspan></text>
-    <text x="50" y="246" class="l" style="animation-delay:3.0s"><tspan class="d">name:     </tspan><tspan class="t">personal</tspan></text>
-    <text x="50" y="274" class="l" style="animation-delay:3.3s"><tspan class="d">commits:  </tspan><tspan class="t">Your Name &lt;12345+you@users.noreply.github.com&gt;</tspan></text>
-    <text x="50" y="302" class="l" style="animation-delay:3.6s"><tspan class="d">guard:    </tspan><tspan class="t">keeps the GitHub owner "you" apart from other accounts</tspan></text>
-    <text x="28" y="338" class="l" style="animation-delay:4.3s"><tspan class="d">Does this look right? (y/n) [y]: </tspan><tspan class="a">⏎</tspan></text>
-    <text x="28" y="374" class="l" style="animation-delay:5.0s"><tspan class="d">Add another profile (another GitHub account)? (y/n) [y]: </tspan><tspan class="a">⏎</tspan></text>
-    <text x="28" y="402" class="l" style="animation-delay:5.6s"><tspan class="d">Name for profile 2: </tspan><tspan class="a">work</tspan></text>
-    <text x="50" y="430" class="l" style="animation-delay:6.1s"><tspan class="d">Email on commits for this account: </tspan><tspan class="a">you@company.com</tspan></text>
-    <text x="50" y="458" class="l" style="animation-delay:6.6s"><tspan class="d">GitHub owners for this account: </tspan><tspan class="a">your-company</tspan></text>
-    <text x="28" y="494" class="l" style="animation-delay:7.4s"><tspan class="d">Add another profile (another GitHub account)? (y/n) [n]: </tspan><tspan class="a">⏎</tspan></text>
-    <text x="28" y="530" class="l" style="animation-delay:8.3s"><tspan class="d">Create these profiles? (y/n) [y]: </tspan><tspan class="a">⏎</tspan></text>
-    <text x="28" y="566" class="l" style="animation-delay:9.0s"><tspan class="ok">✓ Ready: </tspan><tspan class="t">personal  →  ~/Applications/GitHub Desktop - personal.app</tspan></text>
-    <text x="28" y="594" class="l" style="animation-delay:9.4s"><tspan class="ok">✓ Ready: </tspan><tspan class="t">work      →  ~/Applications/GitHub Desktop - work.app</tspan></text>
-    <text x="28" y="630" class="l" style="animation-delay:10.0s"><tspan class="d">Open "GitHub Desktop - personal" now? (y/n) [y]: </tspan><tspan class="a">⏎</tspan></text>
-    <text x="28" y="658" class="l" style="animation-delay:10.6s"><tspan class="p">"personal" opens already signed in, with your repos. </tspan><tspan class="h">Done.</tspan><tspan class="t cursor"> █</tspan></text>
+    <text x="28" y="210" class="l" style="animation-delay:2.5s"><tspan class="d">Is your current GitHub Desktop signed in to "your-name"? (y/n): </tspan><tspan class="a">y</tspan></text>
+    <text x="28" y="246" class="l" style="animation-delay:3.1s"><tspan class="h">Quick setup.</tspan><tspan class="t"> Your GitHub Desktop becomes your first profile:</tspan></text>
+    <text x="50" y="274" class="l" style="animation-delay:3.4s"><tspan class="d">account:  </tspan><tspan class="t">your-name</tspan></text>
+    <text x="50" y="302" class="l" style="animation-delay:3.7s"><tspan class="d">commits:  </tspan><tspan class="t">Your Name &lt;12345+your-name@users.noreply.github.com&gt;</tspan></text>
+    <text x="50" y="330" class="l" style="animation-delay:4.0s"><tspan class="d">guard:    </tspan><tspan class="t">keeps the GitHub owner "your-name" apart from other accounts</tspan></text>
+    <text x="28" y="366" class="l" style="animation-delay:4.6s"><tspan class="d">Does this look right? (y/n) [y]: </tspan><tspan class="a">⏎</tspan></text>
+    <text x="28" y="402" class="l" style="animation-delay:5.2s"><tspan class="d">Add another profile (another GitHub account)? (y/n) [y]: </tspan><tspan class="a">⏎</tspan></text>
+    <text x="28" y="430" class="l" style="animation-delay:5.8s"><tspan class="d">Name for profile 2: </tspan><tspan class="a">work</tspan></text>
+    <text x="50" y="458" class="l" style="animation-delay:6.3s"><tspan class="d">Email on commits for this account: </tspan><tspan class="a">you@company.com</tspan></text>
+    <text x="50" y="486" class="l" style="animation-delay:6.8s"><tspan class="d">GitHub owners for this account: </tspan><tspan class="a">your-company</tspan></text>
+    <text x="28" y="522" class="l" style="animation-delay:7.5s"><tspan class="d">Add another profile (another GitHub account)? (y/n) [n]: </tspan><tspan class="a">⏎</tspan></text>
+    <text x="28" y="558" class="l" style="animation-delay:8.3s"><tspan class="d">Create these profiles? (y/n) [y]: </tspan><tspan class="a">⏎</tspan></text>
+    <text x="28" y="594" class="l" style="animation-delay:9.0s"><tspan class="ok">✓ Ready: </tspan><tspan class="t">your-name  →  ~/Applications/GitHub Desktop - your-name.app</tspan></text>
+    <text x="28" y="622" class="l" style="animation-delay:9.4s"><tspan class="ok">✓ Ready: </tspan><tspan class="t">work       →  ~/Applications/GitHub Desktop - work.app</tspan></text>
+    <text x="28" y="650" class="l" style="animation-delay:9.8s"><tspan class="t">Your launchers are in the Applications folder of your </tspan><tspan class="h">home</tspan><tspan class="t"> folder.</tspan></text>
+    <text x="28" y="686" class="l" style="animation-delay:10.4s"><tspan class="d">Open "GitHub Desktop - your-name" now? (y/n) [y]: </tspan><tspan class="a">⏎</tspan></text>
+    <text x="28" y="722" class="l" style="animation-delay:11.0s"><tspan class="p">Showing your launchers in Finder. </tspan><tspan class="h">Done.</tspan><tspan class="t cursor"> █</tspan></text>
   </g>
 </svg>

@@ -151,7 +151,13 @@ that account opens already signed in, with its repo list:
 
 **Quick setup.** If your Git email (from `git config user.email`, the only
 thing read for this) is a GitHub noreply email such as
-`12345+name@users.noreply.github.com`, setup takes the username `name` as the
-profile's owner and the name `personal` for the profile, shows both, and asks
-once. It never reads GitHub Desktop's account files or tokens for this. At
-the end it offers to open the new profile, but only when a person is typing.
+`12345+name@users.noreply.github.com`, setup asks whether your current GitHub
+Desktop is signed in to the account `name`. You check this in GitHub Desktop's
+**Settings, Accounts**, and the question has no default answer. On **y** it
+names the profile `name`, uses `name` as the guard's owner, shows a summary and
+asks once. On **n** you answer each question, and the Git email is offered for
+your next profile instead of the copied one. It never reads GitHub Desktop's
+account files or tokens for this. Those files also keep accounts you signed
+out of, so they could not tell which account is signed in now. At the end,
+and only when a person is typing, it offers to open the new profile and then
+shows the launchers in Finder.
