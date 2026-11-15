@@ -26,6 +26,12 @@ First public release, for macOS.
   Desktop, private folders, refusal of risky Electron settings.
 - Clean uninstall (`uninstall-mac.command`). Profile data goes to the Trash
   only if you say yes.
+- One-line install: paste a single line into Terminal. It needs only tools
+  every Mac has (no Git), and the files it downloads are not blocked by macOS.
+- Quick first-time setup: if GitHub Desktop is already signed in and your Git
+  email is your GitHub noreply email, the setup guesses the profile name and
+  your GitHub username and asks one question. It also offers to open the new
+  profile at the end.
 - Adding and removing profiles without starting over. Running
   `install-mac.command` again shows a menu (add, remove, start over,
   refresh). `ghdp add` asks only about the new profile and leaves the others

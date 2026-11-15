@@ -15,7 +15,7 @@ And a guard that **stops wrong-account commits before they happen.**
 ![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![No network calls](https://img.shields.io/badge/network%20calls-0-brightgreen)
 ![shellcheck](https://img.shields.io/badge/shellcheck-0%20warnings-blue)
-![Tests](https://img.shields.io/badge/tests-119%20passing-success)
+![Tests](https://img.shields.io/badge/tests-125%20passing-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 [**⚡ Install in 2 minutes**](#-install-in-2-minutes) ·
@@ -32,7 +32,7 @@ And a guard that **stops wrong-account commits before they happen.**
 
 <div align="center">
 
-| 🧪 **119** automated tests | 🧨 **5** attack tests | 💬 **82** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
+| 🧪 **125** automated tests | 🧨 **5** attack tests | 💬 **82** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 
 </div>
@@ -98,22 +98,31 @@ changed, so updates keep working.
 
 ## ⚡ Install in 2 minutes
 
-**You need:**
-- macOS 12 or newer
-- [GitHub Desktop](https://desktop.github.com) in your Applications folder
+**You need:** a Mac with macOS 12 or newer, and [GitHub Desktop](https://desktop.github.com)
+in your Applications folder. That's all: no Git, no extra tools.
 
-### 1️⃣ Get the code and start the setup
+### The fastest way: paste one line
 
-**Pick ONE way.** All three end in the same place: a Terminal window that
-asks you a few questions.
+1. Press **Cmd + Space**, type **Terminal**, and press **Return**.
+2. Copy this whole line, paste it into Terminal, and press **Return**:
 
-| I use… | Go to |
-|---|---|
-| **GitHub Desktop** and don't like Terminal | [Way A](#way-a-with-github-desktop-no-terminal-needed) |
-| **Terminal** | [Way B](#way-b-with-terminal-only) |
-| Neither (I only want to download a file) | [Way C](#way-c-download-a-zip) |
+   ```bash
+   cd ~/Downloads && curl -fsSL https://github.com/shiv-exe-crashed/Github_on_steroids/archive/refs/heads/main.zip -o Github_on_steroids.zip && unzip -qo Github_on_steroids.zip && bash Github_on_steroids-main/install-mac.command
+   ```
 
-#### Way A: with GitHub Desktop (no Terminal needed)
+3. The setup asks a few questions. Press **Return** to accept the suggested
+   answer each time. [What to answer](#what-to-answer) shows an example.
+
+*What does that line do?* It downloads this project as a ZIP from GitHub into
+your Downloads folder, unzips it, and starts the setup. Nothing else is
+downloaded or installed, and it never asks for a password.
+
+*Want to read the code first?* Use one of the other ways below, then start the
+setup yourself with `bash install-mac.command`.
+
+### Other ways to get the code
+
+**With GitHub Desktop (no Terminal needed)**
 
 1. Open **GitHub Desktop** (your normal one).
 2. In the menu bar choose **File → Clone Repository…**
@@ -122,13 +131,10 @@ asks you a few questions.
    https://github.com/shiv-exe-crashed/Github_on_steroids
    ```
 4. In the menu bar choose **Repository → Show in Finder**.
-5. In the Finder window, **double-click `install-mac.command`**.
-   A Terminal window opens and the setup starts. Next: step 2 below.
+5. In the Finder window, **double-click `install-mac.command`**. A Terminal
+   window opens and the setup starts.
 
-#### Way B: with Terminal only
-
-Open **Terminal** (Cmd + Space, type `Terminal`) and run these three
-commands, one after the other:
+**With Git in Terminal**
 
 ```bash
 cd ~/Documents
@@ -136,31 +142,22 @@ git clone https://github.com/shiv-exe-crashed/Github_on_steroids.git
 bash Github_on_steroids/install-mac.command
 ```
 
-The first line goes to your Documents folder, the second downloads the code,
-the third starts the setup. (If your Mac asks to install "command line
-developer tools" the first time you use `git`, say yes and run the commands
-again.) Next: step 2 below.
+(If your Mac asks to install "command line developer tools" the first time
+you use `git`, say yes and run the commands again.)
 
-#### Way C: download a ZIP
-
-1. On this page click **Code → Download ZIP** and double-click the ZIP to
-   unzip it in your Downloads folder.
-2. Open **Terminal** and run:
-   ```bash
-   cd ~/Downloads/Github_on_steroids-main
-   bash install-mac.command
-   ```
-
-Use Terminal here, not a double-click: macOS blocks double-clicking files
-that came from a browser download. Next: step 2 below.
-
-### 2️⃣ Answer the questions
+### What to answer
 
 The setup asks one question at a time and explains itself. Press **Return** to
 accept the answer shown in `[brackets]`. Never type a password here.
 
-**Example for someone with a personal and a work account** (use your own
-names and emails):
+**If GitHub Desktop is already signed in** and your Git email is your GitHub
+**noreply** email (see the tip below), you get a quick summary instead of many
+questions. Press **Return** once: your current GitHub Desktop becomes the
+profile `personal`, with your GitHub username already filled in.
+
+**Otherwise**, and for a second account, the setup asks for each answer.
+Example for someone with a personal and a work account (use your own names
+and emails):
 
 | The setup asks | You type |
 |---|---|
@@ -182,15 +179,19 @@ names and emails):
 > **Which email should I use?** Use your GitHub **noreply** email, so your
 > real address never shows up in public commits. On github.com open
 > **Settings → Emails**, tick **Keep my email addresses private**, and copy
-> the address that ends in `@users.noreply.github.com`.
+> the address that ends in `@users.noreply.github.com`. Set it as your Git
+> email in GitHub Desktop (**Settings → Git**) before you run the setup, and
+> the quick summary above appears.
 
 Every question is explained in the table below:
 [setup questions explained](#-setup-questions-explained).
 
-### 3️⃣ Open your profiles
+### Open your profile
 
-In Finder press **Shift + Cmd + H**, open **Applications**, and double-click
-**GitHub Desktop - &lt;name&gt;**. Or press **Cmd + Space** and type its name.
+At the end the setup asks **Open "GitHub Desktop - personal" now?** Press
+**Return**. Later, open any profile from your **Applications** folder (in
+Finder press **Shift + Cmd + H**, then open **Applications**) or press
+**Cmd + Space** and type its name.
 
 New profiles sign in once: see [first sign-in](#-first-sign-in). That's it. 🎉
 
@@ -467,9 +468,10 @@ Optional per profile: `"folders": ["~/work"]`, `"owners": [...]` and
 [`mac/ghdp allow`](#-working-on-a-repo-that-belongs-to-someone-elses-account)).
 </details>
 
-**Updating:** pull the latest version (in GitHub Desktop: **Fetch** → **Pull**),
-then double-click `install-mac.command` and choose **4** ("Nothing, just
-refresh the launchers"). Your launchers are refreshed and your profiles stay.
+**Updating:** run the [one-line install](#the-fastest-way-paste-one-line)
+again (or, if you cloned it, **Fetch** → **Pull** in GitHub Desktop). Then,
+when the setup shows its menu, choose **4** ("Nothing, just refresh the
+launchers"). Your launchers are refreshed and your profiles stay.
 
 ---
 
@@ -585,7 +587,7 @@ Yes, MIT licensed. Use it, share it, improve it.
 
 | You see | Do this |
 |---|---|
-| *"install-mac.command" cannot be opened* | It came from a browser download. Run `bash install-mac.command` in Terminal from that folder, or clone with GitHub Desktop instead. |
+| *"install-mac.command" cannot be opened* | It came from a browser download, which macOS blocks. Use the [one-line install](#the-fastest-way-paste-one-line) (it avoids this), or run `bash install-mac.command` in Terminal from that folder. |
 | Sign-in keeps waiting | Close every other GitHub Desktop window, then sign in again. |
 | *GitHub Desktop … failed the signature check* | Reinstall GitHub Desktop from [desktop.github.com](https://desktop.github.com). |
 | *The setting NODE_OPTIONS is turned on…* | Something set a risky setting for your whole session. Remove it from your shell files and run `launchctl unsetenv NODE_OPTIONS`. |
