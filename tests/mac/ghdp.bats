@@ -1579,3 +1579,96 @@ write_global_git() { printf '[user]\n\tname = %s\n\temail = %s\n' "$1" "$2" >"$H
   run offer_open personal <<<$'\n'
   [ "$status" -eq 0 ] && [ ! -e "$HOME/launched" ]
 }
+
+# --- experimental: a profile's own Dock icon (a private copy of GitHub Desktop)
+
+icon_setup() {
+  need_app
+  write_config "$GOOD"
+  load_config
+  APP="$(verified_app)"
+  PD="$(profile_dir office)"
+  ensure_private_dir "$(base_dir)/profiles"
+}
+
+@test "launch --own-icon --dry-run names the copy's place and makes nothing" {
+  need_app
+  write_config "$GOOD"
+  run main launch office --own-icon --dry-run
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *"$(profile_dir office)/app/GitHub Desktop.app"* ]]
+  [[ $output == *"private copy"* ]]
+  [ ! -e "$(profile_dir office)/app" ]
+}
+
+@test "the private copy is an exact, signed clone with its own icon" {
+  icon_setup
+  local copy
+  copy="$(make_profile_app 0 "$APP")"
+  [ "$copy" = "$PD/app/GitHub Desktop.app" ]
+  copy_signature_ok "$copy"
+  [ -f "$copy/Icon"$'\r' ]
+  # Same program as the original: its main file is identical.
+  cmp "$APP/Contents/MacOS/GitHub Desktop" "$copy/Contents/MacOS/GitHub Desktop"
+  # The original was not touched (still passes the strict check, no icon file).
+  app_signature_ok "$APP"
+  [ ! -e "$APP/Icon"$'\r' ]
+  [ "$(stat -f %Lp "$PD/app")" = "700" ]
+}
+
+@test "a clean copy is kept and a changed one is made again" {
+  icon_setup
+  make_profile_app 0 "$APP" >/dev/null
+  echo marker >"$PD/app/marker"
+  make_profile_app 0 "$APP" >/dev/null
+  [ -f "$PD/app/marker" ]
+  # Change one file inside the copy: it must be replaced by a fresh clone.
+  echo x >>"$PD/app/GitHub Desktop.app/Contents/Resources/electron.icns"
+  run copy_signature_ok "$PD/app/GitHub Desktop.app"
+  [ "$status" -ne 0 ]
+  make_profile_app 0 "$APP" >/dev/null
+  copy_signature_ok "$PD/app/GitHub Desktop.app"
+  cmp "$APP/Contents/Resources/electron.icns" "$PD/app/GitHub Desktop.app/Contents/Resources/electron.icns"
+}
+
+@test "a copy of an older GitHub Desktop is made again" {
+  icon_setup
+  make_profile_app 0 "$APP" >/dev/null
+  echo marker >"$PD/app/GitHub Desktop.app/Contents/marker"
+  # Pretend GitHub Desktop updated: the original now reports a newer version.
+  app_version() { case $1 in "$APP") printf 'new' ;; *) printf 'old' ;; esac; }
+  make_profile_app 0 "$APP" >/dev/null
+  [ ! -e "$PD/app/GitHub Desktop.app/Contents/marker" ]
+}
+
+@test "the icon is remembered by letter and colour, and a fake app in the copy's place is replaced" {
+  icon_setup
+  make_profile_app 0 "$APP" >/dev/null
+  [ "$(cat "$PD/app/icon.key")" = "O-37,99,235" ]
+  # An unsigned fake app in the copy's place is thrown away and replaced.
+  /bin/rm -rf "$PD/app/GitHub Desktop.app"
+  mkdir -p "$PD/app/GitHub Desktop.app/Contents/MacOS"
+  printf '#!/bin/sh\necho fake\n' >"$PD/app/GitHub Desktop.app/Contents/MacOS/GitHub Desktop"
+  make_profile_app 0 "$APP" >/dev/null
+  copy_signature_ok "$PD/app/GitHub Desktop.app"
+  cmp "$APP/Contents/MacOS/GitHub Desktop" "$PD/app/GitHub Desktop.app/Contents/MacOS/GitHub Desktop"
+}
+
+@test "attack: a link in the copy's place never touches the real app" {
+  icon_setup
+  mkdir -p "$PD/app"
+  /bin/ln -s "$APP" "$PD/app/GitHub Desktop.app"
+  make_profile_app 0 "$APP" >/dev/null
+  [ ! -L "$PD/app/GitHub Desktop.app" ] && [ -d "$PD/app/GitHub Desktop.app" ]
+  app_signature_ok "$APP"
+  [ ! -e "$APP/Icon"$'\r' ]
+}
+
+@test "attack: a linked app folder is refused" {
+  icon_setup
+  mkdir -p "$PD" "$HOME/elsewhere"
+  /bin/ln -s "$HOME/elsewhere" "$PD/app"
+  run make_profile_app 0 "$APP"
+  [ "$status" -ne 0 ]
+  [ -z "$(ls -A "$HOME/elsewhere")" ]
+}
