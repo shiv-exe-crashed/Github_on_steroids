@@ -156,7 +156,35 @@ that came from a browser download. Next: step 2 below.
 
 ### 2️⃣ Answer the questions
 
-The wizard explains itself as it goes. The full list is just below:
+The setup asks one question at a time and explains itself. Press **Return** to
+accept the answer shown in `[brackets]`. Never type a password here.
+
+**Example for someone with a personal and a work account** (use your own
+names and emails):
+
+| The setup asks | You type |
+|---|---|
+| Copy them into your first profile? | `y` if GitHub Desktop is signed in to one of your accounts today, otherwise `n` |
+| Name for profile 1 | `personal` |
+| Name on commits | your name (just press **Return**) |
+| Email on commits | `12345+yourname@users.noreply.github.com` |
+| Folders | press **Return** (skip) |
+| GitHub owners | `yourname` (your GitHub username) |
+| Add another profile? | `y` |
+| Name for profile 2 | `work` |
+| Email on commits | `you@company.com` |
+| Folders | press **Return** (skip) |
+| GitHub owners | `your-company, your-work-username` |
+| Add another profile? | `n` |
+| Create these profiles? | `y` |
+
+> [!TIP]
+> **Which email should I use?** Use your GitHub **noreply** email, so your
+> real address never shows up in public commits. On github.com open
+> **Settings → Emails**, tick **Keep my email addresses private**, and copy
+> the address that ends in `@users.noreply.github.com`.
+
+Every question is explained in the table below:
 [setup questions explained](#-setup-questions-explained).
 
 ### 3️⃣ Open your profiles
@@ -346,9 +374,9 @@ handled on purpose. Almost all are covered by automated tests; the rest
 
 | Situation | What happens |
 |---|---|
-| A damaged or fake GitHub Desktop | Signature check fails; nothing opens. |
-| A risky Electron setting (`NODE_OPTIONS`) is set | The launch is refused, with steps to fix it. |
-| A symlink planted to redirect a write | Refused, or replaced, never written through. |
+| A damaged or fake GitHub Desktop | Its digital signature (proof that GitHub made it) fails the check, so nothing opens. |
+| A risky setting (`NODE_OPTIONS`) is on for your whole Mac session | The launch is refused, with steps to fix it. |
+| A shortcut (symlink) planted to trick the tool into writing somewhere else | Refused, or replaced, never followed. |
 | Another user can write to `~/Applications` | Launchers are not installed there until it's fixed. |
 | A profile folder with loose permissions | Fixed to owner-only on the next run. |
 | An empty variable in a delete | Impossible: every recursive delete is guarded. |
@@ -366,12 +394,12 @@ tool:
   send them. GitHub Desktop keeps them in your macOS Keychain, as always.
 - 🌐 **No network calls. No telemetry. No auto-update.** Checked
   automatically on every change.
-- ✍️ **Verifies GitHub Desktop before every launch:** its code signature must
-  belong to GitHub (Team ID `VEKTX9H2N7`).
+- ✍️ **Checks GitHub Desktop before every launch:** its digital signature must
+  prove that GitHub made it (GitHub's developer ID is `VEKTX9H2N7`).
 - 🧱 **Private by default:** profile folders are readable by you only, and
   this is checked on every run.
-- 🚫 **Refuses risky settings** that would let other programs run code inside
-  GitHub Desktop.
+- 🚫 **Refuses risky settings** that would let other programs sneak their own
+  code into GitHub Desktop.
 - 🙅 **No admin rights, no system changes.** Your `~/.gitconfig` is never
   edited.
 - 🧪 **Reviewed like an attacker would:** two rounds of review; every
@@ -579,5 +607,9 @@ Ideas, bug reports and pull requests are very welcome. Please read
 It helps other developers with two GitHub accounts find it.
 
 Made with ❤️ for everyone juggling work and personal GitHub · [MIT License](LICENSE)
+
+<sub>An independent open-source project. It is not made by, affiliated with, or endorsed by GitHub, Inc.
+"GitHub" and "GitHub Desktop" are trademarks of GitHub, Inc. This tool only starts the official app
+and does not change it.</sub>
 
 </div>
