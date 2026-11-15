@@ -17,7 +17,7 @@
 #   ghdp init                         create your profiles.json from the example
 #   ghdp install                      set up profile folders and launchers
 #   ghdp launch <name> [--dry-run]    open GitHub Desktop with a profile
-#   ghdp launch <name> --own-icon     (experimental) give that profile its own Dock icon
+#   ghdp launch <name> --plain        open with GitHub Desktop's normal icon (no private copy)
 #   ghdp list                         show your profiles and their status
 #   ghdp allow <name> <owner/repo>    let a profile use one repo of another owner
 #   ghdp uninstall                    remove launchers (profile data: you choose)
@@ -1885,12 +1885,29 @@ make_profile_app() {
   printf '%s' "$copy"
 }
 
+# The app to open for a profile: its own private copy (own Dock icon), or the
+# normal GitHub Desktop if the copy cannot be made. The icon is a nicety, so a
+# problem with it must never stop GitHub Desktop from opening.
+app_to_open() {
+  local i="$1" app="$2" copy
+  if copy="$(
+    unset GHDP_GUI
+    make_profile_app "$i" "$app"
+  )" && [ -n "$copy" ]; then
+    printf '%s' "$copy"
+  else
+    tell "Could not make this profile's own Dock icon, so GitHub Desktop opens with its normal icon."
+    printf '%s' "$app"
+  fi
+}
+
 cmd_launch() {
-  local name="" dry=0 own=0 target arg i app gname gemail gc dd pd
+  local name="" dry=0 own=1 target arg i app gname gemail gc dd pd
   for arg in "$@"; do
     case "$arg" in
       --dry-run) dry=1 ;;
-      --own-icon) own=1 ;;
+      --own-icon) own=1 ;; # the default now; still accepted
+      --plain) own=0 ;;
       -*) die "Unknown option \"$arg\"." "Run: ghdp help" ;;
       *)
         [ -z "$name" ] || die "Give only one profile name." "Example: ghdp launch office"
@@ -1934,7 +1951,10 @@ cmd_launch() {
   fi
   prepare_profile "$i" "$app"
   remove_stale_guards
-  if [ "$own" = "1" ]; then make_profile_app "$i" "$app" >/dev/null; fi
+  if [ "$own" = "1" ]; then
+    target="$(app_to_open "$i" "$app")"
+    set -- "$1" "$2" "$3" "$target" "${@:5}"
+  fi
   "$@" || die "GitHub Desktop could not be started." "Try again. If it keeps failing, reinstall GitHub Desktop from https://desktop.github.com."
 }
 

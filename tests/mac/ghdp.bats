@@ -1672,3 +1672,45 @@ icon_setup() {
   [ "$status" -ne 0 ]
   [ -z "$(ls -A "$HOME/elsewhere")" ]
 }
+
+# --- the own Dock icon is the default, with a safe fallback
+
+@test "launch uses the profile's own app copy by default, and --plain opens the normal app" {
+  need_app
+  write_config "$GOOD"
+  run main launch office --dry-run
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *"$(profile_dir office)/app/GitHub Desktop.app"* ]]
+  run main launch office --plain --dry-run
+  [ "$status" -eq 0 ]
+  [[ $output == *"/Applications/GitHub Desktop.app"* ]]
+  [[ $output != *"private copy"* ]]
+}
+
+@test "--own-icon is still accepted" {
+  need_app
+  write_config "$GOOD"
+  run main launch office --own-icon --dry-run
+  [ "$status" -eq 0 ]
+}
+
+@test "app_to_open gives the copy when it works, and the normal app when it cannot be made" {
+  icon_setup
+  [ "$(app_to_open 0 "$APP")" = "$PD/app/GitHub Desktop.app" ]
+  # shellcheck disable=SC2329 # called by app_to_open, not by this test
+  make_profile_app() { die "Pretend problem." "Fix it."; }
+  run app_to_open 0 "$APP"
+  [ "$status" -eq 0 ]
+  [[ $output == *"opens with its normal icon"* ]]
+  [[ $output == *"$APP" ]]
+}
+
+@test "a problem with the icon never shows an error dialog or stops launching" {
+  icon_setup
+  # shellcheck disable=SC2329 # called by app_to_open, not by this test
+  show_dialog() { echo DIALOG >"$HOME/dialog"; }
+  # shellcheck disable=SC2329 # called by app_to_open, not by this test
+  make_profile_app() { die "Pretend problem." "Fix it."; }
+  GHDP_GUI=1 run app_to_open 0 "$APP"
+  [ "$status" -eq 0 ] && [ ! -e "$HOME/dialog" ]
+}
