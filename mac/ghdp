@@ -16,6 +16,7 @@
 #   ghdp install                      set up profile folders and launchers
 #   ghdp launch <name> [--dry-run]    open GitHub Desktop with a profile
 #   ghdp list                         show your profiles and their status
+#   ghdp allow <name> <owner/repo>    let a profile use one repo of another owner
 #   ghdp uninstall                    remove launchers (profile data: you choose)
 #   ghdp help                         show this help
 
@@ -31,6 +32,7 @@ readonly EMAIL_RE='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
 readonly SAFE_PATH_RE='^/[A-Za-z0-9 ._/-]+$'
 readonly FOLDER_RE='^(~/|/)[A-Za-z0-9 ._/-]+$'
 readonly OWNER_RE='^[A-Za-z0-9][A-Za-z0-9-]{0,38}$' # GitHub user or organization
+readonly REPO_RE='^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$' # owner/name on GitHub
 readonly MAX_RULES=10
 
 # Filled by load_config.
@@ -40,6 +42,7 @@ P_GIT_NAMES=()
 P_GIT_EMAILS=()
 P_FOLDERS=() # one string per profile, items separated by newlines
 P_OWNERS=()
+P_REPOS=()
 
 # Filled by the setup wizard.
 W_NAMES=()
@@ -47,6 +50,7 @@ W_GIT_NAMES=()
 W_GIT_EMAILS=()
 W_FOLDERS=()
 W_OWNERS=()
+W_REPOS=()
 
 # ---------------------------------------------------------------- messages
 
@@ -123,6 +127,15 @@ valid_folder() {
 valid_owner() {
   local LC_ALL=C v="$1"
   [[ $v =~ $OWNER_RE ]]
+}
+
+# "owner/name" as written on GitHub, without ".git". "." and ".." are not
+# repo names.
+valid_repo() {
+  local LC_ALL=C v="$1"
+  [[ $v =~ $REPO_RE ]] || return 1
+  case "${v#*/}" in . | .. | *.git) return 1 ;; esac
+  return 0
 }
 
 expand_folder() {
@@ -271,10 +284,10 @@ xml_text() {
 
 # Read and check one profile with a single plutil call, so loading stays
 # fast with many profiles. Only the exact shapes plutil writes are accepted
-# (a dict of text values, plus "folders"/"owners" lists of text); anything
-# else (numbers, true/false, nested objects, line breaks) is refused.
-# Sets R_NAME, R_GNAME, R_GEMAIL, R_FOLDERS and R_OWNERS (lists: one item
-# per line).
+# (a dict of text values, plus "folders"/"owners"/"repos" lists of text);
+# anything else (numbers, true/false, nested objects, line breaks) is
+# refused. Sets R_NAME, R_GNAME, R_GEMAIL, R_FOLDERS, R_OWNERS and R_REPOS
+# (lists: one item per line).
 read_profile() {
   local where="$2" xml line key="" list="" depth=0 seen=" " n=0 v nl=$'\n'
   R_NAME=""
@@ -282,6 +295,7 @@ read_profile() {
   R_GEMAIL=""
   R_FOLDERS=""
   R_OWNERS=""
+  R_REPOS=""
   xml="$(/usr/bin/plutil -extract "profiles.$1" xml1 -o - "$CONFIG" 2>/dev/null)" ||
     die "In profiles.json, $where could not be read." "Compare your file with profiles.example.json."
   while IFS= read -r line; do
@@ -303,9 +317,9 @@ read_profile() {
         xml_text "${v%</key>}"
         key="$XML_TEXT"
         case "$key" in
-          name | gitName | gitEmail | folders | owners) ;;
+          name | gitName | gitEmail | folders | owners | repos) ;;
           *) die "Unknown setting \"$key\" in $where of profiles.json." \
-            "Allowed settings: name gitName gitEmail folders owners. Check the spelling." ;;
+            "Allowed settings: name gitName gitEmail folders owners repos. Check the spelling." ;;
         esac
         ;;
       '<string>'*'</string>')
@@ -319,6 +333,10 @@ read_profile() {
             # shellcheck disable=SC2088 # "~/work" is example text, not a path to expand
             valid_folder "$v" || die "In profiles.json, $where has a \"folders\" item that is not allowed: \"$v\"." "Example: \"~/work\""
             R_FOLDERS="$R_FOLDERS$v$nl"
+          elif [ "$list" = "repos" ]; then
+            valid_repo "$v" || die "In profiles.json, $where has a \"repos\" item that is not allowed: \"$v\"." \
+              "Example: \"owner/repo-name\""
+            R_REPOS="$R_REPOS$v$nl"
           else
             valid_owner "$v" || die "In profiles.json, $where has an \"owners\" item that is not allowed: \"$v\"." \
               "Example: \"your-github-username\""
@@ -336,7 +354,7 @@ read_profile() {
         ;;
       '<array>' | '<array/>')
         case "$key" in
-          folders | owners) if [ "$line" = "<array>" ]; then list="$key" n=0; fi ;;
+          folders | owners | repos) if [ "$line" = "<array>" ]; then list="$key" n=0; fi ;;
           *) die "In profiles.json, $where needs \"$key\" as text in quotes." "Compare your file with profiles.example.json." ;;
         esac
         ;;
@@ -345,7 +363,7 @@ read_profile() {
       *)
         if [ -n "$list" ]; then
           die "In profiles.json, every item in \"$list\" of $where must be text in quotes." "Example: \"$list\": [\"...\"]"
-        elif [ "$key" = "folders" ] || [ "$key" = "owners" ]; then
+        elif [ "$key" = "folders" ] || [ "$key" = "owners" ] || [ "$key" = "repos" ]; then
           die "In profiles.json, $where needs \"$key\" as a list in [ ]." "Example: \"$key\": [\"...\"]"
         fi
         die "In profiles.json, $where needs \"$key\" as text in quotes." "Compare your file with profiles.example.json."
@@ -360,10 +378,11 @@ read_profile() {
   done
   R_FOLDERS="${R_FOLDERS%"$nl"}"
   R_OWNERS="${R_OWNERS%"$nl"}"
+  R_REPOS="${R_REPOS%"$nl"}"
 }
 
 load_config() {
-  local count i where name gname gemail folders owners j norm nl=$'\n'
+  local count i where name gname gemail folders owners repos j norm nl=$'\n'
   local norms="$nl"
   CONFIG="$(config_path)"
   P_NAMES=()
@@ -371,6 +390,7 @@ load_config() {
   P_GIT_EMAILS=()
   P_FOLDERS=()
   P_OWNERS=()
+  P_REPOS=()
   if [ ! -e "$CONFIG" ] && [ ! -L "$CONFIG" ]; then
     die "No profiles.json found at \"$CONFIG\"." "Run: ghdp init"
   fi
@@ -403,6 +423,7 @@ load_config() {
       "Use the email for this account, for example its GitHub noreply email."
     folders="$R_FOLDERS"
     owners="$R_OWNERS"
+    repos="$R_REPOS"
 
     # Duplicate check: each name is normalised once and kept in a newline
     # list, so this stays fast with many profiles. (Names are validated, so
@@ -426,6 +447,7 @@ load_config() {
     P_GIT_EMAILS+=("$gemail")
     P_FOLDERS+=("$folders")
     P_OWNERS+=("$owners")
+    P_REPOS+=("$repos")
     i=$((i + 1))
   done
 }
@@ -583,9 +605,10 @@ inside() {
 }
 
 # The GitHub owner in a remote URL: https://host/owner/repo,
-# ssh://user@host/owner/repo, user@host:owner/repo, or an SSH host alias
-# like work-github:owner/repo. Local paths have no owner.
-owner_of() {
+# The part of a remote URL after the host: "owner/repo..." (nothing for a
+# local path). Understands https://host/owner/repo, ssh://user@host/owner/repo,
+# user@host:owner/repo, or an SSH host alias like work-github:owner/repo.
+path_of() {
   u=$1
   case $u in
     *://*) u=${u#*://} ;;
@@ -594,16 +617,30 @@ owner_of() {
       case $host in
         "$u" | '' | */*) return 0 ;; # no ":" before a "/": a local path
       esac
-      u=${u#*:}
-      lower "${u%%/*}"
+      printf '%s' "${u#*:}"
       return 0
       ;;
   esac
   host=${u%%/*}
   [ -n "$host" ] || return 0
   case $host in *@*) u=${u#*@} ;; esac
-  u=${u#*/}
-  lower "${u%%/*}"
+  printf '%s' "${u#*/}"
+}
+
+owner_of() {
+  rpath=$(path_of "$1")
+  lower "${rpath%%/*}"
+}
+
+# "owner/name" in lower case, without ".git" and without anything after the
+# name (nothing if the URL has no repo part).
+repo_of() {
+  rpath=$(path_of "$1")
+  case $rpath in */*) ;; *) return 0 ;; esac
+  rname=${rpath#*/}
+  rname=${rname%%/*}
+  rname=${rname%.git}
+  lower "${rpath%%/*}/$rname"
 }
 
 # A remote URL without any "user:token@" part, safe to show on screen.
@@ -699,17 +736,26 @@ check_owner() {
     *[!a-z0-9-]*) stop "Could not read the GitHub owner of the remote $(safe_url "$1")." \
       "Fix the remote URL in this repo, then try again." ;;
   esac
+  # A repo the user allowed for this profile with "ghdp allow".
+  repo=$(repo_of "$1")
+  if [ -n "$repo" ] && rule repo | grep -qxF -- "$repo"; then return 0; fi
+  # The hint is a command people may copy: show the repo name only if it
+  # has nothing but plain characters.
+  case $repo in *[!a-z0-9._/-]*) repo="" ;; esac
+  hint="Or allow just this repo for this profile (in Terminal, from the gh-desktop-profiles folder): mac/ghdp allow $(rule profile) ${repo:-owner/repo}"
   owners=$(rule owner)
   if [ -n "$owners" ] && printf '%s\n' "$owners" | grep -qxF -- "$o"; then return 0; fi
   other=$(other_profile_for_owner "$o")
   if [ -n "$other" ]; then
     stop "The remote $(safe_url "$1") belongs to \"$o\", which is set for the \"$other\" profile." \
-      "Open this repo in \"GitHub Desktop - $other\" instead."
+      "Open this repo in \"GitHub Desktop - $other\" instead." \
+      "$hint"
   fi
   if [ -n "$owners" ]; then
     stop "The remote $(safe_url "$1") belongs to \"$o\", which this profile does not use." \
       "This profile is for: $(printf '%s' "$owners" | tr '\n' ' ')" \
-      "Open the right GitHub Desktop profile, or add \"$o\" to this profile's owners (run setup again)."
+      "Open the right GitHub Desktop profile." \
+      "$hint"
   fi
 }
 
@@ -803,7 +849,7 @@ new_temp() {
 # Each file is written in full first and then moved into place, so a commit
 # made while this runs never finds a missing or half-written hook.
 write_guard() {
-  local i="$1" pd="$2" f o h tmp
+  local i="$1" pd="$2" f o r h tmp
   ensure_private_dir "$pd/hooks"
   tmp="$(new_temp "$pd")" || exit 1
   {
@@ -816,6 +862,9 @@ write_guard() {
     while IFS= read -r o; do
       if [ -n "$o" ]; then printf 'owner=%s\n' "$(lower "$o")"; fi
     done <<<"${P_OWNERS[$i]}"
+    while IFS= read -r r; do
+      if [ -n "$r" ]; then printf 'repo=%s\n' "$(lower "$r")"; fi
+    done <<<"${P_REPOS[$i]}"
   } >"$tmp"
   place_file "$tmp" "$pd/guard.rules" 600
   for h in $GUARD_HOOKS; do
@@ -1246,6 +1295,7 @@ write_profiles_json() {
         "$sep" "${W_NAMES[$i]}" "${W_GIT_NAMES[$i]}" "${W_GIT_EMAILS[$i]}"
       if [ -n "${W_FOLDERS[$i]}" ]; then printf ', "folders": %s' "$(json_list "${W_FOLDERS[$i]}")"; fi
       if [ -n "${W_OWNERS[$i]}" ]; then printf ', "owners": %s' "$(json_list "${W_OWNERS[$i]}")"; fi
+      if [ -n "${W_REPOS[$i]:-}" ]; then printf ', "repos": %s' "$(json_list "${W_REPOS[$i]}")"; fi
       printf ' }'
       sep=$',\n'
       i=$((i + 1))
@@ -1398,6 +1448,47 @@ cmd_setup() {
   fi
   say ""
   say "Do not sign out of an account in one window: the same account in another window would be signed out too."
+}
+
+# Let one profile commit and push to one repo whose owner it does not use
+# (for example a repo you share with a teammate). Only that repo is allowed:
+# the rest of that owner stays protected. Saved in profiles.json and in the
+# profile's guard rules, so it works at once, without reopening anything.
+cmd_allow() {
+  local i repo n pd nl=$'\n'
+  [ "$#" -eq 2 ] || die "allow needs a profile name and a repo." \
+    "Example: ghdp allow work some-owner/some-repo"
+  check_home
+  load_config
+  i="$(find_profile "$1")" || die "There is no profile called \"$1\"." "Run: ghdp list"
+  repo="${2#https://github.com/}"
+  repo="$(lower "${repo%/}")"
+  repo="${repo%.git}"
+  valid_repo "$repo" || die "\"$2\" is not a GitHub repo in the form owner/name." \
+    "Use the part after github.com/ in the repo link, for example some-owner/some-repo."
+  if printf '%s\n' "${P_REPOS[$i]}" | grep -qxF -- "$repo"; then
+    say "\"$1\" can already use $repo. Nothing changed."
+    return 0
+  fi
+  n=0
+  if [ -n "${P_REPOS[$i]}" ]; then n="$(printf '%s\n' "${P_REPOS[$i]}" | /usr/bin/grep -c '')"; fi
+  [ "$n" -lt "$MAX_RULES" ] || die "\"$1\" already has $MAX_RULES allowed repos, which is the limit." \
+    "Remove one from \"repos\" in profiles.json first."
+  P_REPOS[i]="${P_REPOS[$i]}${P_REPOS[$i]:+$nl}$repo"
+  W_NAMES=("${P_NAMES[@]}")
+  W_GIT_NAMES=("${P_GIT_NAMES[@]}")
+  W_GIT_EMAILS=("${P_GIT_EMAILS[@]}")
+  W_FOLDERS=("${P_FOLDERS[@]}")
+  W_OWNERS=("${P_OWNERS[@]}")
+  W_REPOS=("${P_REPOS[@]}")
+  write_profiles_json
+  pd="$(profile_dir "$1")" || exit 1
+  ensure_private_dir "$(base_dir)/profiles"
+  ensure_private_dir "$pd"
+  write_guard "$i" "$pd"
+  say "Done. \"$1\" can now commit and push to $repo."
+  say "Other repos of that owner stay protected. The guard still checks the email."
+  say "(Your old profiles.json is kept as a backup: profiles.json.bak)"
 }
 
 cmd_install() {
@@ -1562,6 +1653,9 @@ cmd_list() {
     else
       say "  guard: email only (no folders or owners set)"
     fi
+    if [ -n "${P_REPOS[$i]}" ]; then
+      say "  allowed repos: $(printf "%s" "${P_REPOS[$i]}" | /usr/bin/tr "\n" " ")"
+    fi
     i=$((i + 1))
   done
 }
@@ -1578,6 +1672,7 @@ main() {
     install) cmd_install "$@" ;;
     launch) cmd_launch "$@" ;;
     list) cmd_list ;;
+    allow) cmd_allow "$@" ;;
     uninstall) cmd_uninstall "$@" ;;
     help | -h | --help) usage ;;
     version | --version) say "$GHDP_VERSION" ;;

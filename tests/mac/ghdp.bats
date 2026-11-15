@@ -218,6 +218,8 @@ b"; do
     '{"version":1,"profiles":[{"name":{"n":"o"},"gitName":"A","gitEmail":"a@b.co"}]}|"name" as text'
     '{"version":1,"profiles":[{"name":"o","gitName":"A\nB","gitEmail":"a@b.co"}]}|line break'
     '{"version":1,"profiles":[{"name":"o","gitName":"A","gitEmail":"a@b.co","folders":"~/w"}]}|as a list'
+    '{"version":1,"profiles":[{"name":"o","gitName":"A","gitEmail":"a@b.co","repos":"a/b"}]}|as a list'
+    '{"version":1,"profiles":[{"name":"o","gitName":"A","gitEmail":"a@b.co","repos":["not a repo"]}]}|"repos" item that is not allowed'
   )
   local c json want
   for c in "${cases[@]}"; do
@@ -936,4 +938,135 @@ teammate_commit() {
   refused_with "Copying your GitHub Desktop data failed"
   [ ! -e "$(data_dir personal)" ]
   [ ! -e "$(config_path)" ]
+}
+
+# ------------------------------------------- allow: one repo of another owner
+
+# Two accounts, no folder rules, so only the owner check is in play.
+setup_owner_guard() {
+  write_config '{"version":1,"profiles":[
+    {"name":"office","gitName":"Ada","gitEmail":"ada@work.example","owners":["Acme"]},
+    {"name":"personal","gitName":"Ada","gitEmail":"ada@home.example","owners":["me"]}]}'
+  load_config
+  ensure_private_dir "$(base_dir)/profiles"
+  local i=0 pd
+  while [ "$i" -lt "${#P_NAMES[@]}" ]; do
+    pd="$(profile_dir "${P_NAMES[$i]}")"
+    ensure_private_dir "$pd"
+    write_guard "$i" "$pd"
+    i=$((i + 1))
+  done
+}
+
+@test "valid_repo accepts owner/name and refuses everything else" {
+  local ok bad
+  # shellcheck disable=SC2016 # the $( ) below is text to refuse, not to run
+  for ok in a/b Acme/tool my-org/my.repo_2 a/.github; do valid_repo "$ok" || { echo "should be valid: $ok"; return 1; }; done
+  # shellcheck disable=SC2016 # same: text to refuse
+  for bad in "" a /b a/ a/b/c "a b/c" a/b.git a/. a/.. -a/b "a/b;x" 'a/$(x)' 'a/b
+c'; do
+    if valid_repo "$bad"; then echo "should be refused: $bad"; return 1; fi
+  done
+}
+
+@test "allow lets a profile use one repo of an owner it does not use" {
+  setup_owner_guard
+  new_repo "$HOME/stuff/tool" "https://github.com/ACME/tool.git"
+  run as_profile personal git -C "$HOME/stuff/tool" commit -q -m test
+  refused_with 'set for the "office" profile'
+  refused_with 'mac/ghdp allow personal acme/tool'
+  run cmd_allow personal "https://github.com/ACME/Tool.git"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  grep -qx 'repo=acme/tool' "$(profile_dir personal)/guard.rules"
+  run as_profile personal git -C "$HOME/stuff/tool" commit -q -m test
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+}
+
+@test "allow is exact: other repos of that owner stay protected" {
+  setup_owner_guard
+  cmd_allow personal acme/tool >/dev/null
+  local url
+  for url in "https://github.com/acme/tool-two.git" "https://github.com/acme/other" "https://github.com/acme/too" "https://github.com/acme-evil/tool"; do
+    rm -rf "$HOME/stuff/x"
+    new_repo "$HOME/stuff/x" "$url"
+    run as_profile personal git -C "$HOME/stuff/x" commit -q -m test
+    [ "$status" -ne 0 ] || { echo "should be refused: $url"; return 1; }
+  done
+}
+
+@test "allow works for every kind of remote URL" {
+  setup_owner_guard
+  cmd_allow personal acme/tool >/dev/null
+  local url
+  for url in "git@github.com:Acme/Tool.git" "ssh://git@github.com/acme/tool" "work-github:ACME/tool.git" "https://user@github.com/acme/tool/"; do
+    rm -rf "$HOME/stuff/x"
+    new_repo "$HOME/stuff/x" "$url"
+    run as_profile personal git -C "$HOME/stuff/x" commit -q -m test
+    [ "$status" -eq 0 ] || { echo "should be allowed: $url"; echo "$output"; return 1; }
+  done
+}
+
+@test "allow changes only that profile" {
+  setup_owner_guard
+  cmd_allow personal acme/tool >/dev/null
+  run grep -q '^repo=' "$(profile_dir office)/guard.rules"
+  [ "$status" -ne 0 ]
+  grep -qx 'owner=acme' "$(profile_dir office)/guard.rules"
+  # The allowed repo is still refused for the email check: wrong email stops it.
+  new_repo "$HOME/stuff/tool" "https://github.com/acme/tool.git"
+  run /usr/bin/env GIT_AUTHOR_EMAIL=other@x.example GIT_COMMITTER_EMAIL=other@x.example \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=A GIT_COMMITTER_NAME=A \
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0="$(profile_dir personal)/hooks" \
+    git -C "$HOME/stuff/tool" commit -q -m test
+  refused_with "email"
+}
+
+@test "allow is saved in profiles.json, kept as a backup, and safe to repeat" {
+  setup_owner_guard
+  run cmd_allow personal Acme/Tool
+  [ "$status" -eq 0 ]
+  [ -f "$(config_path).bak" ]
+  [ "$(stat -f %Lp "$(config_path)")" = "600" ]
+  run cmd_allow personal acme/tool
+  [ "$status" -eq 0 ]
+  [[ $output == *"already"* ]]
+  load_config
+  [ "${P_REPOS[1]}" = "acme/tool" ]
+  [ -z "${P_REPOS[0]}" ]
+  # The other settings survive the rewrite.
+  [ "${P_OWNERS[0]}" = "Acme" ] && [ "${P_GIT_EMAILS[1]}" = "ada@home.example" ]
+}
+
+@test "allow refuses unknown profiles, bad repos and too many repos" {
+  setup_owner_guard
+  run cmd_allow nobody acme/tool
+  refused_with 'no profile called "nobody"'
+  run cmd_allow personal acme
+  refused_with "owner/name"
+  run cmd_allow personal 'acme/tool;rm -rf ~'
+  refused_with "owner/name"
+  run cmd_allow personal
+  refused_with "needs a profile name and a repo"
+  local n
+  for n in 1 2 3 4 5 6 7 8 9 10; do cmd_allow personal "acme/r$n" >/dev/null; done
+  run cmd_allow personal acme/r11
+  refused_with "limit"
+}
+
+@test "list shows allowed repos" {
+  setup_owner_guard
+  cmd_allow personal acme/tool >/dev/null
+  run cmd_list
+  [[ $output == *"allowed repos: acme/tool"* ]]
+}
+
+@test "a repo name in the hint is shown only when it is plain text" {
+  setup_owner_guard
+  # shellcheck disable=SC2016 # $IFS is part of the bad URL, not to be expanded
+  new_repo "$HOME/stuff/x" 'https://github.com/acme/x;touch$IFS/tmp/pwned'
+  run as_profile personal git -C "$HOME/stuff/x" commit -q -m test
+  refused_with "mac/ghdp allow personal owner/repo"
+  local hint
+  hint="$(grep 'mac/ghdp allow' <<<"$output")"
+  [[ $hint != *touch* ]]
 }
