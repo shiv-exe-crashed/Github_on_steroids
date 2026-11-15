@@ -44,6 +44,7 @@ this tool honestly cannot protect against. This covers the macOS version.
 | T14 | Uninstall deletes data by mistake or breaks your normal GitHub Desktop. | It asks first and removes only this tool's launchers (matched by bundle id) and its installed copy. Profile data goes to the Trash only if you say yes. It never touches the normal GitHub Desktop data or the Keychain. Every `rm -rf` is guarded against empty paths. |
 | T15 | GitHub Desktop's own usage stats: each new profile looks like a new install. | Not our code. Setup tips say: untick usage stats in Settings → Advanced in each profile. |
 | T16 | The one-line install downloads a ZIP of the `main` branch from github.com and starts the setup, so whoever controls that branch controls what runs. | The line uses HTTPS to github.com only, is explained in the README, asks for no password, and offers other ways for people who want to read the code first. A release tag will replace `main`, so everyone gets the same reviewed code. Accepted until then. |
+| T17 | `--own-icon` runs a private copy of GitHub Desktop, which could be swapped or tampered with. | The copy is an exact clone of the verified app and must pass the same GitHub signature check (pinned Team ID and bundle id) without `--strict`, which only tolerates the extra icon file macOS adds: a changed, missing or fake file still fails. It is re-checked on every launch and made again if it fails, if GitHub Desktop updated, or if the icon changed. A link in its place is replaced, never followed. Experimental. |
 
 ## Honest limits
 

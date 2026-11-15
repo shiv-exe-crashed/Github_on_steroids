@@ -15,7 +15,7 @@ And a guard that **stops wrong-account commits before they happen.**
 ![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![No network calls](https://img.shields.io/badge/network%20calls-0-brightgreen)
 ![shellcheck](https://img.shields.io/badge/shellcheck-0%20warnings-blue)
-![Tests](https://img.shields.io/badge/tests-125%20passing-success)
+![Tests](https://img.shields.io/badge/tests-132%20passing-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 [**⚡ Install in 2 minutes**](#-install-in-2-minutes) ·
@@ -32,7 +32,7 @@ And a guard that **stops wrong-account commits before they happen.**
 
 <div align="center">
 
-| 🧪 **125** automated tests | 🧨 **5** attack tests | 💬 **82** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
+| 🧪 **132** automated tests | 🧨 **5** attack tests | 💬 **86** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 
 </div>
@@ -557,10 +557,19 @@ never reads or copies them.
 <details>
 <summary><b>Why do both windows show the same icon in the Dock?</b></summary>
 
-A running window always shows GitHub Desktop's own icon. Changing that would
-mean changing the app itself, which this tool never does. The colored badges
-are on the launchers: drag them into your Dock for one-click access. Use Light
-and Dark themes to tell open windows apart.
+A running window shows the icon of the app file that runs it, and by default
+that is GitHub Desktop itself. The colored badges are on the launchers: drag
+them into your Dock for one-click access, and use Light and Dark themes to tell
+open windows apart.
+
+**Experimental:** give a profile its own Dock icon with
+`mac/ghdp launch <name> --own-icon`. It makes a private copy of GitHub Desktop
+for that profile (instant and free on disk, because Macs clone files), puts the
+profile's badge on the copy, and opens the copy. GitHub Desktop itself is never
+changed, the copy must pass the same GitHub signature check, and it is made
+again when GitHub Desktop updates. It is new and only tested by our automatic
+tests, so check the Dock yourself, and if anything looks wrong just open the
+profile normally (without `--own-icon`).
 </details>
 
 <details>

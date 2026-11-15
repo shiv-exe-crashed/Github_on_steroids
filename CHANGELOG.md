@@ -26,6 +26,9 @@ First public release, for macOS.
   Desktop, private folders, refusal of risky Electron settings.
 - Clean uninstall (`uninstall-mac.command`). Profile data goes to the Trash
   only if you say yes.
+- Experimental: `ghdp launch <name> --own-icon` gives a profile its own Dock
+  icon by opening a private, signature-checked copy of GitHub Desktop that
+  carries the profile's badge. Not used unless asked for.
 - One-line install: paste a single line into Terminal. It needs only tools
   every Mac has (no Git), and the files it downloads are not blocked by macOS.
 - Quick first-time setup: if GitHub Desktop is already signed in and your Git
