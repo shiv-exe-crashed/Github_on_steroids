@@ -43,6 +43,7 @@ this tool honestly cannot protect against. This covers the macOS version.
 | T13 | Importing your current GitHub Desktop copies something harmful or damages it. | Read-only, into a new folder only. Caches, logs, cookies, lock files and outside links are skipped. It waits until GitHub Desktop releases its database locks. |
 | T14 | Uninstall deletes data by mistake or breaks your normal GitHub Desktop. | It asks first and removes only this tool's launchers (matched by bundle id) and its installed copy. Profile data goes to the Trash only if you say yes. It never touches the normal GitHub Desktop data or the Keychain. Every `rm -rf` is guarded against empty paths. |
 | T15 | GitHub Desktop's own usage stats: each new profile looks like a new install. | Not our code. Setup tips say: untick usage stats in Settings → Advanced in each profile. |
+| T16 | The one-line install downloads a ZIP of the `main` branch from github.com and starts the setup, so whoever controls that branch controls what runs. | The line uses HTTPS to github.com only, is explained in the README, asks for no password, and offers other ways for people who want to read the code first. A release tag will replace `main`, so everyone gets the same reviewed code. Accepted until then. |
 
 ## Honest limits
 

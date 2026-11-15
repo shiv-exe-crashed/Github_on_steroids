@@ -148,3 +148,10 @@ that account opens already signed in, with its repo list:
   files, so it never copies a half-written database.
 - The token is not copied (it is in the Keychain), and the copy is
   owner-only.
+
+**Quick setup.** If your Git email (from `git config user.email`, the only
+thing read for this) is a GitHub noreply email such as
+`12345+name@users.noreply.github.com`, setup takes the username `name` as the
+profile's owner and the name `personal` for the profile, shows both, and asks
+once. It never reads GitHub Desktop's account files or tokens for this. At
+the end it offers to open the new profile, but only when a person is typing.

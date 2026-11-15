@@ -78,7 +78,8 @@ changed, so updates keep working.
 | 🪟 **Side by side** | Open several profiles at once. Click one again and its window comes to the front, never a duplicate. |
 | 🪪 **The right identity, every commit** | Each profile commits with its own name and email. Your global `~/.gitconfig` is never touched. |
 | 🛡️ **Wrong-account guard** | Commits, merges and pushes in the wrong profile are stopped with a clear message that names the right profile. |
-| 🪄 **Guided setup** | A friendly wizard asks a few questions. No config files to edit. |
+| 🚀 **One-line install** | Paste one line into Terminal. It needs no Git and no extra tools. |
+| 🪄 **Guided setup** | A friendly wizard asks a few questions, often just one (press **Return**). No config files to edit. |
 | ⚡ **No sign-in for your current account** | Setup can copy your current GitHub Desktop into the first profile, so it opens already signed in, with your repos. |
 | 🔒 **Security first** | Never touches your tokens, verifies GitHub Desktop's signature before every launch, keeps profile data private. |
 | 📦 **Zero dependencies** | Plain bash and tools that ship with macOS. Works offline. One readable file. |
@@ -216,6 +217,7 @@ password here: you sign in later, inside GitHub Desktop.
 | The wizard asks | What it means | What to type |
 |---|---|---|
 | **What do you want to do?** *(only if you already have profiles)* | A small menu: **1** adds a profile (only the new one is asked about), **2** removes one, **3** starts over and replaces all, **4** just refreshes the launchers. | **1** to add an account |
+| **Does this look right?** *(quick setup, only if GitHub Desktop is signed in and your Git email is a GitHub noreply email)* | A summary of the guessed answers: profile `personal`, your name and email, and your GitHub username as the guard's owner. | **y** (press **Return**). **n** lets you answer each question yourself. |
 | **Copy them into your first profile…?** *(only if GitHub Desktop is already set up)* | Turn your current GitHub Desktop (its login and repo list) into your first profile, so that account doesn't sign in again. The original is never changed. | **y** (recommended) |
 | **Name for profile 1** | A short name for this profile. It becomes the launcher name, e.g. "GitHub Desktop - work". | `work`, `personal`, `opensource`… (letters, numbers, `-` and `_`) |
 | **Name on commits** | The author name shown on commits from this profile. | Your name |
@@ -225,6 +227,7 @@ password here: you sign in later, inside GitHub Desktop.
 | **Add GitHub owners now?** *(only if you skipped both)* | Without folders or owners, the guard can only check the email. | **y** (recommended) |
 | **Add another profile?** | Set up your next account. | **y** for each extra account, then **n** |
 | **Create these profiles?** | A last look at the summary. | **y** |
+| **Open "GitHub Desktop - …" now?** *(at the end)* | Opens the new profile for you, so you don't have to find it in Finder. | **y** (press **Return**) |
 | **Please quit GitHub Desktop now** *(when copying)* | The copy needs GitHub Desktop closed, so its data is complete. | Press **Cmd + Q** in GitHub Desktop, then **Return** |
 
 > [!TIP]
