@@ -1383,6 +1383,41 @@ cmd_init() {
 
 # Guided setup: asks for your profiles, can copy your current GitHub Desktop
 # into the first one, writes profiles.json and installs the launchers.
+# The GitHub username inside a GitHub noreply email: "12345+name@users..." or
+# "name@users...". Prints nothing for any other email.
+owner_from_email() {
+  local e="$1" l
+  case "$e" in
+    *@users.noreply.github.com) ;;
+    *) return 0 ;;
+  esac
+  l="${e%@users.noreply.github.com}"
+  l="${l#*+}"
+  if valid_owner "$l"; then printf '%s' "$l"; fi
+}
+
+# Quick setup for a first profile: show the guessed answers and ask once.
+quick_confirm() {
+  say ""
+  say "Quick setup. Your current GitHub Desktop becomes your first profile:"
+  say "  name:     personal   (the launcher will be called \"GitHub Desktop - personal\")"
+  say "  commits:  $1 <$2>"
+  say "  guard:    keeps the GitHub owner \"$3\" apart from your other accounts"
+  ask_yes "Does this look right? (say n to choose these yourself)" y
+}
+
+# Offer to open a profile right away, so nobody has to find it in Finder.
+open_after() {
+  say ""
+  ask_yes "Open \"GitHub Desktop - $1\" now?" y || return 0
+  cmd_launch "$1"
+}
+
+# Only when a person is typing (not in scripts or tests).
+offer_open() {
+  if [ -t 0 ]; then open_after "$1"; fi
+}
+
 # What to do when you already have profiles. Returns 0 only for "start
 # over" (the caller then runs the full wizard); the other choices do their
 # work here and return 1.
@@ -1407,7 +1442,7 @@ setup_menu() {
 }
 
 cmd_setup() {
-  local app cfg def_name def_email n gname gemail import="" last i pd dd
+  local app cfg def_name def_email owner n gname gemail import="" last i pd dd
   [ "$#" -eq 0 ] || die "setup does not take options." "Run: ghdp setup"
   check_home
   say "GitHub Desktop Profiles setup"
@@ -1450,11 +1485,20 @@ cmd_setup() {
     say "(Its WHOLE repo list is copied. If it holds repos of another account, you"
     say "remove them from this profile afterwards; setup tells you how.)"
     if ask_yes "Copy them into your first profile, so that account does not need to sign in again?" y; then
-      n="$(ask_profile_name 1 new)" || exit 1
-      gname="$(ask_git_name "$def_name")" || exit 1
-      gemail="$(ask_email "$def_email")" || exit 1
-      add_wizard_profile "$n" "$gname" "$gemail"
-      ask_rules
+      owner="$(owner_from_email "$def_email")"
+      if [ -n "$def_name" ] && [ -n "$owner" ] && [ ! -e "$(data_dir personal)" ] &&
+        quick_confirm "$def_name" "$def_email" "$owner"; then
+        n=personal
+        add_wizard_profile "$n" "$def_name" "$def_email"
+        W_FOLDERS+=("")
+        W_OWNERS+=("$owner")
+      else
+        n="$(ask_profile_name 1 new)" || exit 1
+        gname="$(ask_git_name "$def_name")" || exit 1
+        gemail="$(ask_email "$def_email")" || exit 1
+        add_wizard_profile "$n" "$gname" "$gemail"
+        ask_rules
+      fi
       import="$n"
     fi
   fi
@@ -1522,6 +1566,7 @@ cmd_setup() {
   fi
   say ""
   say "Do not sign out of an account in one window: the same account in another window would be signed out too."
+  offer_open "${W_NAMES[0]}"
 }
 
 # Let one profile commit and push to one repo whose owner it does not use
@@ -1616,6 +1661,7 @@ cmd_add() {
   say "Added \"$n\": $(launcher_path "$n")"
   say "Next: open \"GitHub Desktop - $n\" and sign in to its account. Keep it the"
   say "only GitHub Desktop window open while you sign in."
+  offer_open "$n"
 }
 
 # Remove one profile: its launcher and guard rules go. Its data (login,

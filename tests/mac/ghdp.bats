@@ -1500,3 +1500,82 @@ push_check() {
   load_config
   [ "${P_NAMES[*]}" = "office personal" ] && [ "${P_REPOS[0]}" = "acme/tool2" ]
 }
+
+# --- quick first-time setup and "open it now"
+
+write_global_git() { printf '[user]\n\tname = %s\n\temail = %s\n' "$1" "$2" >"$HOME/.gitconfig"; }
+
+@test "owner_from_email reads the GitHub username out of a noreply email only" {
+  [ "$(owner_from_email "12345+ada-l@users.noreply.github.com")" = "ada-l" ]
+  [ "$(owner_from_email "ada-l@users.noreply.github.com")" = "ada-l" ]
+  [ "$(owner_from_email "9+Ada@users.noreply.github.com")" = "Ada" ]
+  [ -z "$(owner_from_email "ada@example.org")" ]
+  [ -z "$(owner_from_email "1+x@users.noreply.github.com.evil.example")" ]
+  [ -z "$(owner_from_email "1+-bad@users.noreply.github.com")" ]
+  [ -z "$(owner_from_email "")" ]
+}
+
+@test "quick setup: a signed-in GitHub Desktop with a noreply email needs only Return" {
+  need_app
+  make_normal_data
+  write_global_git "Ada L" "12345+ada-l@users.noreply.github.com"
+  run main setup <<<$'\n\nn\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *"Quick setup"* ]]
+  [[ $output != *"Name for profile 1"* ]]
+  load_config
+  [ "${P_NAMES[*]}" = "personal" ]
+  [ "${P_GIT_NAMES[0]}" = "Ada L" ] && [ "${P_GIT_EMAILS[0]}" = "12345+ada-l@users.noreply.github.com" ]
+  [ "${P_OWNERS[0]}" = "ada-l" ] && [ -z "${P_FOLDERS[0]}" ]
+  [ -f "$(data_dir personal)/Local Storage/leveldb/000003.log" ]
+  [ -d "$(launcher_path personal)" ]
+  grep -qx "owner=ada-l" "$(profile_dir personal)/guard.rules"
+}
+
+@test "quick setup: saying no lets you choose every answer yourself" {
+  need_app
+  make_normal_data
+  write_global_git "Ada L" "12345+ada-l@users.noreply.github.com"
+  run main setup <<<$'\nn\nmine\n\n\n\n\nn\nn\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *"Quick setup"* ]]
+  load_config
+  [ "${P_NAMES[*]}" = "mine" ]
+  [ -z "${P_OWNERS[0]}" ]
+}
+
+@test "quick setup is skipped without a noreply email or when personal already has data" {
+  need_app
+  make_normal_data
+  write_global_git "Ada L" "ada@example.org"
+  run main setup <<<$'\npersonal\n\n\n\n\nn\nn\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output != *"Quick setup"* ]]
+  load_config
+  [ "${P_NAMES[*]}" = "personal" ] && [ "${P_GIT_EMAILS[0]}" = "ada@example.org" ] && [ -z "${P_OWNERS[0]}" ]
+  /bin/rm -rf "$(base_dir)"
+  write_global_git "Ada L" "12345+ada-l@users.noreply.github.com"
+  mkdir -p "$(data_dir personal)"
+  run main setup <<<$'\nother\n\n\n\n\nn\nn\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output != *"Quick setup"* ]]
+  load_config
+  [ "${P_NAMES[*]}" = "other" ]
+}
+
+@test "open_after launches the profile on yes and does nothing on no" {
+  # shellcheck disable=SC2329 # called by open_after, not by this test
+  cmd_launch() { echo "$1" >"$HOME/launched"; }
+  run open_after personal <<<$'\n'
+  [ "$status" -eq 0 ] && [ "$(cat "$HOME/launched")" = "personal" ]
+  /bin/rm -f "$HOME/launched"
+  run open_after personal <<<$'n\n'
+  [ "$status" -eq 0 ] && [ ! -e "$HOME/launched" ]
+}
+
+@test "offer_open asks nobody when no person is typing (scripts, tests)" {
+  # shellcheck disable=SC2329 # called by offer_open, not by this test
+  cmd_launch() { echo "$1" >"$HOME/launched"; }
+  run offer_open personal <<<$'\n'
+  [ "$status" -eq 0 ] && [ ! -e "$HOME/launched" ]
+}
