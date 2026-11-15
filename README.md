@@ -218,6 +218,9 @@ Each new profile signs in **once**:
 4. On **Configure Git**, choose **Configure manually**. You'll see this
    profile's name and email. Click **Finish**.
 5. Check **Settings → Accounts**: it shows the right account. ✅
+6. Open **Settings → Git → Hooks** and make sure **"Load Git hook environment
+   variables from shell"** is **unticked** (it is by default). Why: see
+   [the note under the guard](#-good-to-know-github-desktops-hooks-setting).
 
 > [!TIP]
 > Give each profile its own theme (**Settings → Appearance**), for example
@@ -249,6 +252,26 @@ works.
 
 Your repos' own Git hooks (husky, pre-commit and friends) **keep working**:
 the guard runs first, then hands over to them.
+
+### 🪧 Good to know: GitHub Desktop's hooks setting
+
+The guard is a **safety net against mistakes**, not a lock. GitHub Desktop has
+**Settings → Git → Hooks → "Load Git hook environment variables from shell"**.
+We tested both positions (GitHub Desktop 3.6.11, macOS):
+
+| The setting | What you see when the guard stops a commit |
+|---|---|
+| **Off** (the default; keep it like this) | **Commit failed**, with the guard's message and only a **Close** button. |
+| On | The guard still runs and shows the same message, but GitHub Desktop adds an **Ignore and Continue** button. One click skips the guard. |
+
+So: leave it **off**. That way a wrong-account commit is simply refused. Turn
+it on only if one of your own repo hooks needs your shell's environment (for
+example tools managed by nvm or rbenv). GitHub Desktop can also skip hooks on
+purpose (the commit options menu has **Bypass Commit Hooks**); that is your
+choice to make, and the guard does not try to fight it.
+
+*Not tested yet:* what this setting does to the guard on **push** (the commit
+check is the one we tried).
 
 ### 👥 Working on a repo that belongs to someone else's account
 
