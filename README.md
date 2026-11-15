@@ -15,7 +15,7 @@ And a guard that **stops wrong-account commits before they happen.**
 ![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![No network calls](https://img.shields.io/badge/network%20calls-0-brightgreen)
 ![shellcheck](https://img.shields.io/badge/shellcheck-0%20warnings-blue)
-![Tests](https://img.shields.io/badge/tests-77%20passing-success)
+![Tests](https://img.shields.io/badge/tests-86%20passing-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 [**⚡ Install in 2 minutes**](#-install-in-2-minutes) ·
@@ -32,7 +32,7 @@ And a guard that **stops wrong-account commits before they happen.**
 
 <div align="center">
 
-| 🧪 **77** automated tests | 🧨 **5** attack tests | 💬 **68** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
+| 🧪 **86** automated tests | 🧨 **5** attack tests | 💬 **73** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 
 </div>
@@ -210,6 +210,28 @@ works.
 Your repos' own Git hooks (husky, pre-commit and friends) **keep working**:
 the guard runs first, then hands over to them.
 
+### 👥 Working on a repo that belongs to someone else's account
+
+Teams share repos: a teammate's personal account, a client's organization, or
+your own other account added as a **collaborator**. The guard blocks these by
+default, because the owner is not one of the profile's owners. Allow **just
+that one repo** for the profile that should use it:
+
+```bash
+mac/ghdp allow work some-owner/shared-repo
+```
+
+- It takes effect at once. No restart, no setup.
+- Only that repo is allowed. Other repos of `some-owner` stay protected, and
+  the email check still applies.
+- You can paste the repo link too: `mac/ghdp allow work https://github.com/some-owner/shared-repo`.
+- See what you allowed with `mac/ghdp list`. Undo it by deleting the repo from
+  `"repos"` in `profiles.json`, then run `mac/ghdp install`.
+
+> [!NOTE]
+> The guard is only a safety net on your Mac. Whether an account **may** push
+> to a repo is decided by GitHub: add the account as a collaborator there first.
+
 ---
 
 ## 🧩 Edge cases handled
@@ -243,7 +265,7 @@ handled on purpose. Almost all are covered by automated tests; the rest
 | Two names that differ only in capitals (`Work` vs `work`) | Treated as the same, because Mac folders ignore case. |
 | A profile renamed (`my_work` → `my-work`) or removed | Its old launcher and guard rules are cleaned up. |
 | A typo in a setting (`gitEmial`) | Refused with a clear message, never silently ignored. |
-| Wrong types, nested objects, line breaks in settings | Each is refused with a message that says what to fix (19 broken-config cases tested). |
+| Wrong types, nested objects, line breaks in settings | Each is refused with a message that says what to fix (21 broken-config cases tested). |
 | Setup run twice | Nothing breaks or doubles up. Settings GitHub Desktop added to a profile are kept. |
 | Setup cancelled before you confirm | Nothing is written. |
 | A copy interrupted halfway | The partial copy never counts as profile data. |
@@ -320,6 +342,7 @@ The launchers are all you need day to day. For everything else:
 |---|---|
 | `bash install-mac.command` | Guided setup. Run it again to add, rename or remove profiles. |
 | `mac/ghdp list` | Your profiles, their guard rules, and a health check |
+| `mac/ghdp allow <name> <owner/repo>` | Let a profile use one repo of an owner it doesn't use |
 | `mac/ghdp install` | Rebuild launchers after editing your profiles by hand |
 | `mac/ghdp launch <name>` | Open a profile from Terminal (add `--dry-run` to only show the command) |
 | `bash uninstall-mac.command` | Remove everything this tool made (it asks first) |
@@ -342,7 +365,9 @@ Edit it, then run `mac/ghdp install`:
 }
 ```
 
-Optional per profile: `"folders": ["~/work"]` and `"owners": [...]`.
+Optional per profile: `"folders": ["~/work"]`, `"owners": [...]` and
+`"repos": ["some-owner/shared-repo"]` (single repos of other owners; see
+[`mac/ghdp allow`](#-working-on-a-repo-that-belongs-to-someone-elses-account)).
 </details>
 
 **Updating:** pull the latest version (in GitHub Desktop: **Fetch** → **Pull**),
@@ -376,6 +401,17 @@ touched.
 
 No. It starts the official, signed app with a separate data folder per
 profile. Nothing inside the app is changed, and updates keep working.
+</details>
+
+<details>
+<summary><b>Several people (or accounts) work on the same repo. Does the guard get in the way?</b></summary>
+
+Only on your own Mac, and only for **your** profiles. Your teammates are not
+affected. For a repo whose owner your profile doesn't use, run
+`mac/ghdp allow <profile> <owner/repo>` once. See
+[Working on a repo that belongs to someone else's account](#-working-on-a-repo-that-belongs-to-someone-elses-account).
+Everything under an owner your profile **does** use (for example your whole
+company organization) works without any extra step.
 </details>
 
 <details>

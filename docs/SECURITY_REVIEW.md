@@ -52,6 +52,7 @@ are fixed and tested:
 | F17 | Guard files were rewritten by delete-then-write, leaving a moment with no hook. A folder planted at a hook's path was not refused. | Low | Each file is written in full and moved into place in one step; folders in the way are refused. |
 | F18 | A cancelled or failed import left a partial copy that later counted as profile data. | Low | The copy goes to a temporary folder, which is moved into place only when complete. profiles.json is written after it. |
 | F19 | A local backup remote with a space in its path was refused. Merge commits skipped the commit checks. `~/Applications` writable by others was not refused. | Low | All three are fixed. |
+| F20 | A refusal message suggests a command to copy (`ghdp allow …`) and takes the repo name from the remote URL. A name like `x;rm -rf ~` could have ended up in a command the user pastes. | Medium | The repo name is shown only if it has plain characters (letters, numbers, `. _ - /`); otherwise a placeholder is shown. The allow list matches whole `owner/name` text only, never patterns. Tested. |
 
 ## Accepted risks
 

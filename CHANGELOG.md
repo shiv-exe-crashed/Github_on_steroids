@@ -3,6 +3,15 @@
 All notable changes are listed here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `ghdp allow <profile> <owner/repo>`: let one profile commit and push to one
+  repo of an owner it does not use (for example a teammate's repo), without
+  opening up the rest of that owner. New optional `"repos"` list in
+  `profiles.json`; `ghdp list` shows it.
+
 ## [0.1.0] - 2026-11-14
 
 First public release, for macOS.
