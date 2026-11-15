@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" width="1280" height="400" role="img" aria-label="GitHub Desktop Profiles: one click per GitHub account. Work and personal, finally apart.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="0.55" stop-color="#161b3a"/>
+      <stop offset="1" stop-color="#2a1458"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7dd3fc"/>
+      <stop offset="1" stop-color="#c4b5fd"/>
+    </linearGradient>
+    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#ffffff" opacity="0.07"/>
+    </pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <style>
+    .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .card { opacity: 0; animation: rise .7s ease forwards; }
+    .c2 { animation-delay: .25s; }
+    .c3 { animation-delay: .5s; }
+    @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+
+  <rect width="1280" height="400" rx="28" fill="url(#bg)"/>
+  <rect width="1280" height="400" rx="28" fill="url(#dots)"/>
+
+  <!-- Title -->
+  <text x="72" y="150" class="sans" font-size="64" font-weight="800" fill="#ffffff">GitHub Desktop Profiles</text>
+  <text x="74" y="204" class="sans" font-size="30" font-weight="600" fill="url(#accent)">One click per GitHub account.</text>
+  <text x="74" y="246" class="sans" font-size="26" fill="#c9d1d9">Work and personal, finally apart.</text>
+
+  <!-- Chips -->
+  <g class="sans" font-size="17" font-weight="600">
+    <rect x="72" y="292" width="104" height="38" rx="19" fill="#ffffff" opacity="0.1"/>
+    <text x="124" y="317" text-anchor="middle" fill="#e6edf3">macOS</text>
+    <rect x="188" y="292" width="176" height="38" rx="19" fill="#ffffff" opacity="0.1"/>
+    <text x="276" y="317" text-anchor="middle" fill="#e6edf3">0 dependencies</text>
+    <rect x="376" y="292" width="188" height="38" rx="19" fill="#ffffff" opacity="0.1"/>
+    <text x="470" y="317" text-anchor="middle" fill="#e6edf3">0 network calls</text>
+    <rect x="576" y="292" width="120" height="38" rx="19" fill="#ffffff" opacity="0.1"/>
+    <text x="636" y="317" text-anchor="middle" fill="#e6edf3">77 tests</text>
+  </g>
+
+  <!-- Launcher cards -->
+  <g class="card" filter="url(#shadow)">
+    <rect x="808" y="70" width="400" height="92" rx="20" fill="#ffffff" opacity="0.08"/>
+    <rect x="828" y="88" width="56" height="56" rx="14" fill="#6d28d9"/>
+    <circle cx="874" cy="134" r="15" fill="#22c55e" stroke="#ffffff" stroke-width="3"/>
+    <text x="874" y="140" text-anchor="middle" class="sans" font-size="16" font-weight="800" fill="#ffffff">W</text>
+    <text x="904" y="112" class="sans" font-size="20" font-weight="700" fill="#ffffff">GitHub Desktop - work</text>
+    <text x="904" y="140" class="sans" font-size="16" fill="#8b949e">work account · work repos only</text>
+  </g>
+  <g class="card c2" filter="url(#shadow)">
+    <rect x="808" y="178" width="400" height="92" rx="20" fill="#ffffff" opacity="0.08"/>
+    <rect x="828" y="196" width="56" height="56" rx="14" fill="#6d28d9"/>
+    <circle cx="874" cy="242" r="15" fill="#3b82f6" stroke="#ffffff" stroke-width="3"/>
+    <text x="874" y="248" text-anchor="middle" class="sans" font-size="16" font-weight="800" fill="#ffffff">P</text>
+    <text x="904" y="220" class="sans" font-size="20" font-weight="700" fill="#ffffff">GitHub Desktop - personal</text>
+    <text x="904" y="248" class="sans" font-size="16" fill="#8b949e">personal account · personal repos only</text>
+  </g>
+  <g class="card c3">
+    <rect x="808" y="286" width="400" height="56" rx="16" fill="#22c55e" opacity="0.14"/>
+    <path d="M840 296 l14 6 v10 c0 9 -6 15 -14 18 c-8 -3 -14 -9 -14 -18 v-10 z" fill="#22c55e"/>
+    <path d="M834 313 l4 4 l8 -9" stroke="#0d1117" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="868" y="320" class="sans" font-size="18" font-weight="700" fill="#bbf7d0">Wrong-account guard: on</text>
+  </g>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 330" width="900" height="330" role="img" aria-label="GitHub Desktop shows Commit failed: the guard stopped a work repo in the personal profile and names the right profile.">
+  <style>
+    .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .mono { font-family: "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; fill: #e6edf3; white-space: pre; }
+    .go { fill: #7ee787; font-weight: 700; } .note { fill: #8b949e; font-size: 14px; }
+    .pop { opacity: 0; animation: pop .5s ease .3s forwards; }
+    @keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+  <rect width="900" height="330" rx="18" fill="#1c2128"/>
+  <g class="pop" xml:space="preserve">
+    <text x="40" y="58" class="sans" font-size="24" font-weight="700" fill="#ffffff">Commit failed</text>
+    <rect x="720" y="34" width="144" height="34" rx="17" fill="#f85149" opacity="0.18"/>
+    <text x="792" y="57" text-anchor="middle" class="sans" font-size="15" font-weight="700" fill="#ff7b72">✋ blocked</text>
+    <line x1="0" y1="86" x2="900" y2="86" stroke="#30363d"/>
+    <circle cx="66" cy="150" r="22" fill="none" stroke="#f85149" stroke-width="3"/>
+    <text x="66" y="160" text-anchor="middle" class="sans" font-size="26" font-weight="800" fill="#f85149">!</text>
+    <rect x="112" y="110" width="752" height="186" rx="8" fill="#000000"/>
+    <text x="132" y="148" class="mono">gh-desktop-profiles stopped this in the "personal" profile:</text>
+    <text x="132" y="180" class="mono">  The remote https://github.com/my-company/app.git belongs to</text>
+    <text x="132" y="206" class="mono">  "my-company", which is set for the "work" profile.</text>
+    <text x="132" y="238" class="mono go">  Open this repo in "GitHub Desktop - work" instead.</text>
+    <text x="132" y="276" class="mono note">No commit was made. Your repo is exactly as before.</text>
+  </g>
+</svg>
