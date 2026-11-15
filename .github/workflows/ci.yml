@@ -1,0 +1,108 @@
+# CI: lint, tests and secret scan on every push and pull request.
+# Security notes:
+#   - Only read access to the repo; no secrets are used.
+#   - Actions are pinned to full commit SHAs; downloaded tools are pinned to
+#     exact versions and checked against their SHA-256 before use.
+#   - Every job has a time limit, so a stuck test cannot run for hours.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    name: Policy, shellcheck, gitleaks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Policy checks (no network calls, no eval, guarded rm -rf, no personal paths)
+        run: bash scripts/check-policy.sh
+
+      - name: Install shellcheck v0.11.0 (checksum verified)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o sc.tar.xz https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  sc.tar.xz" | sha256sum -c -
+          tar -xJf sc.tar.xz
+          echo "$RUNNER_TEMP/shellcheck-v0.11.0" >> "$GITHUB_PATH"
+
+      - name: shellcheck (zero findings, style level)
+        run: |
+          shellcheck --version
+          shellcheck -x --shell=bash --severity=style mac/ghdp tests/mac/ghdp.bats \
+            install-mac.command uninstall-mac.command scripts/check-policy.sh .githooks/pre-commit
+
+      - name: Install gitleaks v8.30.1 (checksum verified)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o gl.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gl.tar.gz" | sha256sum -c -
+          tar -xzf gl.tar.gz gitleaks
+
+      - name: gitleaks (whole history)
+        run: |
+          "$RUNNER_TEMP/gitleaks" git --redact --no-banner --verbose .
+
+  mac:
+    name: Mac tests (bats)
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install bats-core v1.14.0 (pinned commit)
+        run: |
+          git clone --quiet --depth 1 --branch v1.14.0 https://github.com/bats-core/bats-core.git "$RUNNER_TEMP/bats"
+          test "$(git -C "$RUNNER_TEMP/bats" rev-parse HEAD)" = "eb7f42f8d608ac693d7a4b67474f6714ea68cfc5"
+
+      - name: Mac tests (GitHub Desktop is not installed here, so app tests are skipped)
+        run: |
+          "$RUNNER_TEMP/bats/bin/bats" tests/mac
+
+  windows:
+    name: Windows (in development, does not block)
+    runs-on: windows-2025
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install pinned test tools
+        shell: pwsh
+        run: |
+          Install-PSResource -Name PSScriptAnalyzer -Version 1.25.0 -TrustRepository -Scope CurrentUser -Quiet
+          Install-PSResource -Name Pester -Version 6.2.0 -TrustRepository -Scope CurrentUser -Quiet
+
+      - name: PSScriptAnalyzer (zero findings at all levels)
+        shell: pwsh
+        run: |
+          $findings = @()
+          foreach ($f in 'windows/ghdp.ps1', 'tests/windows/ghdp.Tests.ps1') {
+            $findings += Invoke-ScriptAnalyzer -Path $f -Severity Error, Warning, Information
+          }
+          if ($findings.Count -gt 0) { $findings | Format-Table -AutoSize; exit 1 }
+
+      - name: Pester
+        shell: pwsh
+        run: |
+          Import-Module Pester -RequiredVersion 6.2.0
+          $c = New-PesterConfiguration
+          $c.Run.Path = 'tests/windows'
+          $c.Run.Exit = $true
+          $c.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $c

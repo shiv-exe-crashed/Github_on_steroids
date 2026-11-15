@@ -1,0 +1,28 @@
+#!/bin/bash
+# Pre-commit check for this repo: blocks commits that contain secrets or
+# break the project policy. GitHub Desktop runs it too.
+# Enable once in your clone: git config core.hooksPath .githooks
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+
+# 1. Built-in secret check on the staged changes (works without any tool).
+#    GitHub tokens, private keys, AWS keys, Slack tokens.
+secret='(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,})'
+if git diff --cached -U0 --no-color | grep -E '^\+' | grep -n -E "$secret"; then
+  echo "Blocked: the staged lines above look like a secret (token or private key)." >&2
+  echo "Remove it from the file, then commit again." >&2
+  exit 1
+fi
+
+# 2. gitleaks, if it is installed (recommended: brew install gitleaks).
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --staged --redact --no-banner
+else
+  echo "Note: gitleaks is not installed, so only the built-in secret check ran." >&2
+fi
+
+# 3. Project policy (no network calls, no eval, guarded rm -rf, no personal paths).
+bash "$root/scripts/check-policy.sh" >/dev/null || {
+  bash "$root/scripts/check-policy.sh" >&2 || true
+  exit 1
+}
