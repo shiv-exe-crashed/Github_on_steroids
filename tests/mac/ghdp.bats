@@ -1588,6 +1588,7 @@ icon_setup() {
   load_config
   APP="$(verified_app)"
   PD="$(profile_dir office)"
+  CD="$(app_copy_dir office)"
   ensure_private_dir "$(base_dir)/profiles"
 }
 
@@ -1605,7 +1606,8 @@ icon_setup() {
   icon_setup
   local copy
   copy="$(make_profile_app 0 "$APP")"
-  [ "$copy" = "$PD/app/GitHub Desktop.app" ]
+  [ "$copy" = "$CD/GitHub Desktop.app" ]
+  [[ $copy == */Applications/* ]]
   copy_signature_ok "$copy"
   [ -f "$copy/Icon"$'\r' ]
   # Same program as the original: its main file is identical.
@@ -1613,64 +1615,119 @@ icon_setup() {
   # The original was not touched (still passes the strict check, no icon file).
   app_signature_ok "$APP"
   [ ! -e "$APP/Icon"$'\r' ]
-  [ "$(stat -f %Lp "$PD/app")" = "700" ]
+  [ "$(stat -f %Lp "$CD")" = "700" ]
 }
 
 @test "a clean copy is kept and a changed one is made again" {
   icon_setup
   make_profile_app 0 "$APP" >/dev/null
-  echo marker >"$PD/app/marker"
+  echo marker >"$CD/marker"
   make_profile_app 0 "$APP" >/dev/null
-  [ -f "$PD/app/marker" ]
+  [ -f "$CD/marker" ]
   # Change one file inside the copy: it must be replaced by a fresh clone.
-  echo x >>"$PD/app/GitHub Desktop.app/Contents/Resources/electron.icns"
-  run copy_signature_ok "$PD/app/GitHub Desktop.app"
+  echo x >>"$CD/GitHub Desktop.app/Contents/Resources/electron.icns"
+  run copy_signature_ok "$CD/GitHub Desktop.app"
   [ "$status" -ne 0 ]
   make_profile_app 0 "$APP" >/dev/null
-  copy_signature_ok "$PD/app/GitHub Desktop.app"
-  cmp "$APP/Contents/Resources/electron.icns" "$PD/app/GitHub Desktop.app/Contents/Resources/electron.icns"
+  copy_signature_ok "$CD/GitHub Desktop.app"
+  cmp "$APP/Contents/Resources/electron.icns" "$CD/GitHub Desktop.app/Contents/Resources/electron.icns"
 }
 
 @test "a copy of an older GitHub Desktop is made again" {
   icon_setup
   make_profile_app 0 "$APP" >/dev/null
-  echo marker >"$PD/app/GitHub Desktop.app/Contents/marker"
+  echo marker >"$CD/GitHub Desktop.app/Contents/marker"
   # Pretend GitHub Desktop updated: the original now reports a newer version.
   app_version() { case $1 in "$APP") printf 'new' ;; *) printf 'old' ;; esac; }
   make_profile_app 0 "$APP" >/dev/null
-  [ ! -e "$PD/app/GitHub Desktop.app/Contents/marker" ]
+  [ ! -e "$CD/GitHub Desktop.app/Contents/marker" ]
 }
 
 @test "the icon is remembered by letter and colour, and a fake app in the copy's place is replaced" {
   icon_setup
   make_profile_app 0 "$APP" >/dev/null
-  [ "$(cat "$PD/app/icon.key")" = "O-37,99,235" ]
+  [ "$(cat "$CD/icon.key")" = "O-37,99,235" ]
   # An unsigned fake app in the copy's place is thrown away and replaced.
-  /bin/rm -rf "$PD/app/GitHub Desktop.app"
-  mkdir -p "$PD/app/GitHub Desktop.app/Contents/MacOS"
-  printf '#!/bin/sh\necho fake\n' >"$PD/app/GitHub Desktop.app/Contents/MacOS/GitHub Desktop"
+  /bin/rm -rf "$CD/GitHub Desktop.app"
+  mkdir -p "$CD/GitHub Desktop.app/Contents/MacOS"
+  printf '#!/bin/sh\necho fake\n' >"$CD/GitHub Desktop.app/Contents/MacOS/GitHub Desktop"
   make_profile_app 0 "$APP" >/dev/null
-  copy_signature_ok "$PD/app/GitHub Desktop.app"
-  cmp "$APP/Contents/MacOS/GitHub Desktop" "$PD/app/GitHub Desktop.app/Contents/MacOS/GitHub Desktop"
+  copy_signature_ok "$CD/GitHub Desktop.app"
+  cmp "$APP/Contents/MacOS/GitHub Desktop" "$CD/GitHub Desktop.app/Contents/MacOS/GitHub Desktop"
 }
 
 @test "attack: a link in the copy's place never touches the real app" {
   icon_setup
-  mkdir -p "$PD/app"
-  /bin/ln -s "$APP" "$PD/app/GitHub Desktop.app"
+  mkdir -p "$CD"
+  /bin/ln -s "$APP" "$CD/GitHub Desktop.app"
   make_profile_app 0 "$APP" >/dev/null
-  [ ! -L "$PD/app/GitHub Desktop.app" ] && [ -d "$PD/app/GitHub Desktop.app" ]
+  [ ! -L "$CD/GitHub Desktop.app" ] && [ -d "$CD/GitHub Desktop.app" ]
   app_signature_ok "$APP"
   [ ! -e "$APP/Icon"$'\r' ]
 }
 
 @test "attack: a linked app folder is refused" {
   icon_setup
-  mkdir -p "$PD" "$HOME/elsewhere"
-  /bin/ln -s "$HOME/elsewhere" "$PD/app"
+  mkdir -p "$HOME/Applications" "$HOME/elsewhere"
+  /bin/ln -s "$HOME/elsewhere" "$HOME/Applications/.gh-desktop-profiles"
   run make_profile_app 0 "$APP"
   [ "$status" -ne 0 ]
   [ -z "$(ls -A "$HOME/elsewhere")" ]
+}
+
+@test "the copy lives inside an Applications folder, so GitHub Desktop does not ask to move itself" {
+  icon_setup
+  local copy
+  copy="$(make_profile_app 0 "$APP")"
+  [[ $copy == "$HOME/Applications/.gh-desktop-profiles/office/GitHub Desktop.app" ]]
+  # GitHub Desktop (Electron) treats any path with an "Applications" folder as fine.
+  [[ "/$copy/" == */Applications/* ]]
+  [ ! -e "$PD/app" ]
+}
+
+@test "an older copy inside the profile folder is removed" {
+  icon_setup
+  mkdir -p "$PD/app/GitHub Desktop.app/Contents"
+  echo old >"$PD/app/GitHub Desktop.app/Contents/old"
+  make_profile_app 0 "$APP" >/dev/null
+  [ ! -e "$PD/app" ]
+}
+
+@test "the copy is refused when Applications can be changed by other people" {
+  icon_setup
+  mkdir -p "$HOME/Applications"
+  /bin/chmod 777 "$HOME/Applications"
+  run make_profile_app 0 "$APP"
+  /bin/chmod 755 "$HOME/Applications"
+  refused_with "can be changed by other users"
+  [ ! -e "$HOME/Applications/.gh-desktop-profiles" ]
+}
+
+@test "removing a profile or uninstalling removes its copy of GitHub Desktop" {
+  need_app
+  write_config "$GOOD"
+  main install >/dev/null
+  load_config
+  local real
+  real="$(verified_app)"
+  make_profile_app 0 "$real" >/dev/null
+  make_profile_app 1 "$real" >/dev/null
+  [ -d "$(app_copy_dir office)" ] && [ -d "$(app_copy_dir personal)" ]
+  main remove personal <<<$'y\nn\n' >/dev/null
+  [ ! -e "$(app_copy_dir personal)" ] && [ -d "$(app_copy_dir office)" ]
+  main uninstall <<<$'y\nn\n' >/dev/null
+  [ ! -e "$HOME/Applications/.gh-desktop-profiles" ]
+}
+
+@test "attack: a linked copy folder is never followed when cleaning up" {
+  need_app
+  write_config "$GOOD"
+  main install >/dev/null
+  mkdir -p "$HOME/elsewhere" "$HOME/Applications/.gh-desktop-profiles"
+  echo keep >"$HOME/elsewhere/data.txt"
+  /bin/ln -s "$HOME/elsewhere" "$HOME/Applications/.gh-desktop-profiles/ghost"
+  main install >/dev/null
+  [ "$(cat "$HOME/elsewhere/data.txt")" = "keep" ]
 }
 
 # --- the own Dock icon is the default, with a safe fallback
@@ -1696,7 +1753,7 @@ icon_setup() {
 
 @test "app_to_open gives the copy when it works, and the normal app when it cannot be made" {
   icon_setup
-  [ "$(app_to_open 0 "$APP")" = "$PD/app/GitHub Desktop.app" ]
+  [ "$(app_to_open 0 "$APP")" = "$CD/GitHub Desktop.app" ]
   # shellcheck disable=SC2329 # called by app_to_open, not by this test
   make_profile_app() { die "Pretend problem." "Fix it."; }
   run app_to_open 0 "$APP"

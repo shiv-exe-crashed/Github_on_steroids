@@ -191,6 +191,15 @@ gitconfig_path() {
   require_valid_name "$1"
   printf '%s/profiles/%s/gitconfig' "$(base_dir)" "$1"
 }
+# Where a profile's private copy of GitHub Desktop lives. It must sit inside a
+# folder called "Applications": GitHub Desktop asks "Move GitHub Desktop to the
+# Applications folder?" whenever it runs from anywhere else, and that question's
+# "Move and Restart" could replace the real app. The folder is hidden, so the
+# copies do not show up in Launchpad or Spotlight.
+app_copy_dir() {
+  require_valid_name "$1"
+  printf '%s/Applications/.gh-desktop-profiles/%s' "$HOME" "$1"
+}
 launcher_path() {
   require_valid_name "$1"
   printf '%s/Applications/GitHub Desktop - %s.app' "$HOME" "$1"
@@ -946,6 +955,25 @@ remove_stale_guards() {
       i=$((i + 1))
     done
     if [ "$keep" = "0" ]; then /bin/rm -f "${d:?}guard.rules"; fi
+  done
+}
+
+# Private copies of GitHub Desktop whose profile is not in profiles.json any
+# more are removed (they are only copies; the profile's data is not touched).
+# Linked folders are never followed.
+remove_stale_app_copies() {
+  local root="$HOME/Applications/.gh-desktop-profiles" d base keep i
+  if [ -L "$root" ] || [ ! -d "$root" ]; then return 0; fi
+  for d in "$root"/*/; do
+    if [ -L "${d%/}" ] || [ ! -d "$d" ]; then continue; fi
+    base="$(/usr/bin/basename "$d")"
+    keep=0
+    i=0
+    while [ "$i" -lt "${#P_NAMES[@]}" ]; do
+      if [ "$(lower "${P_NAMES[$i]}")" = "$(lower "$base")" ]; then keep=1; fi
+      i=$((i + 1))
+    done
+    if [ "$keep" = "0" ]; then /bin/rm -rf "${d:?}"; fi
   done
 }
 
@@ -1774,6 +1802,7 @@ cmd_install() {
   # leaves a removed profile's rules behind.
   remove_stale_launchers
   remove_stale_guards
+  remove_stale_app_copies
   i=0
   while [ "$i" -lt "${#P_NAMES[@]}" ]; do
     prepare_profile "$i" "$app"
@@ -1830,6 +1859,10 @@ cmd_uninstall() {
     /bin/rm -rf "${base:?}/bin"
     say "Removed the installed copy of this tool."
   fi
+  if [ -d "$HOME/Applications/.gh-desktop-profiles" ] && [ ! -L "$HOME/Applications/.gh-desktop-profiles" ]; then
+    /bin/rm -rf "${HOME:?}/Applications/.gh-desktop-profiles"
+    say "Removed the private copies of GitHub Desktop."
+  fi
   if [ -d "$base" ] && [ ! -L "$base" ]; then
     say ""
     say "Your profile data is still here: $base"
@@ -1857,12 +1890,20 @@ cmd_uninstall() {
 # again whenever it is missing, out of date (GitHub Desktop updated) or fails
 # the signature check. Prints the path of the copy.
 make_profile_app() {
-  local i="$1" app="$2" name pd dir copy key letter
+  local i="$1" app="$2" name pd dir copy key letter apps
   name="${P_NAMES[$i]}"
   pd="$(profile_dir "$name")" || exit 1
-  dir="$pd/app"
-  ensure_private_dir "$pd"
+  dir="$(app_copy_dir "$name")" || exit 1
+  apps="$HOME/Applications"
+  if [ -L "$apps" ]; then die "\"$apps\" is a link, not a real folder." "Remove the link, then try again."; fi
+  if [ ! -d "$apps" ]; then /bin/mkdir -m 755 "$apps"; fi
+  if writable_by_others "$apps"; then
+    die "\"$apps\" can be changed by other users, so a copy of GitHub Desktop there would not be safe." "Run: chmod go-w \"$apps\""
+  fi
+  ensure_private_dir "$(/usr/bin/dirname "$dir")"
   ensure_private_dir "$dir"
+  # An older version kept the copy inside the profile folder: remove it.
+  if [ -L "$pd/app" ]; then /bin/rm -f "${pd:?}/app"; elif [ -d "$pd/app" ]; then /bin/rm -rf "${pd:?}/app"; fi
   copy="$dir/GitHub Desktop.app"
   letter="$(printf '%s' "${name:0:1}" | /usr/bin/tr '[:lower:]' '[:upper:]')"
   key="$letter-$(badge_color "$i")"
@@ -1870,16 +1911,16 @@ make_profile_app() {
     [ "$(/bin/cat "$dir/icon.key" 2>/dev/null || true)" != "$key" ] || ! copy_signature_ok "$copy"; then
     /bin/rm -rf "${copy:?}" "${dir:?}/badge.icns" "${dir:?}/icon.key"
     /bin/cp -c -R "$app" "$copy" || die "Could not make a private copy of GitHub Desktop for \"$name\"." \
-      "This needs a Mac disk formatted as APFS (all recent Macs). Open the profile without --own-icon."
+      "This needs a Mac disk formatted as APFS (all recent Macs). Open the profile with --plain."
     make_badge_icon "$app/Contents/Resources/electron.icns" "$dir/badge.icns" "$letter" "$(badge_color "$i")" ||
-      die "Could not draw the icon for \"$name\"." "Open the profile without --own-icon."
+      die "Could not draw the icon for \"$name\"." "Open the profile with --plain."
     set_custom_icon "$dir/badge.icns" "$copy" || die "Could not put the icon on the copy for \"$name\"." \
-      "Open the profile without --own-icon."
+      "Open the profile with --plain."
     printf '%s' "$key" >"$dir/icon.key"
     if ! copy_signature_ok "$copy"; then
       /bin/rm -rf "${copy:?}"
       die "The private copy of GitHub Desktop failed the signature check, so it was removed." \
-        "Open the profile without --own-icon, and reinstall GitHub Desktop if this repeats."
+        "Open the profile with --plain, and reinstall GitHub Desktop if this repeats."
     fi
   fi
   printf '%s' "$copy"
@@ -1934,7 +1975,7 @@ cmd_launch() {
   # every Git config file, so commits always use this profile's identity.
   # GIT_CONFIG_* points Git at this profile's guard hooks (see above).
   target="$app"
-  if [ "$own" = "1" ]; then target="$pd/app/GitHub Desktop.app"; fi
+  if [ "$own" = "1" ]; then target="$(app_copy_dir "$name")/GitHub Desktop.app"; fi
   set -- /usr/bin/open -n -a "$target" \
     --env "GIT_CONFIG_GLOBAL=$gc" \
     --env "GIT_AUTHOR_NAME=$gname" --env "GIT_AUTHOR_EMAIL=$gemail" \
