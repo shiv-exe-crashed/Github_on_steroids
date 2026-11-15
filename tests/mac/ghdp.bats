@@ -415,15 +415,15 @@ make_normal_data() {
   [ ! -e "$(config_path)" ]
 }
 
-@test "setup keeps an existing config unless you say yes, then backs it up" {
+@test "setup with profiles: option 4 only refreshes launchers, option 3 starts over and backs up" {
   need_app
   write_config "$GOOD"
-  run main setup <<<$'\n'
+  run main setup <<<$'4\n'
   [ "$status" -eq 0 ]
   [[ $output == *"Ready: office"* ]]
   [ "$(cat "$(config_path)")" = "$GOOD" ]
   [ -d "$(launcher_path personal)" ]
-  run main setup <<<$'y\nsolo\nAda\na@b.co\n\n\nn\nn\n\n'
+  run main setup <<<$'3\nsolo\nAda\na@b.co\n\n\nn\nn\n\n'
   [ "$status" -eq 0 ]
   [ "$(cat "$(config_path).bak")" = "$GOOD" ]
   [ "$(stat -f %Lp "$(config_path).bak")" = "600" ]
@@ -722,7 +722,7 @@ ZERO="$(printf '0%.0s' {1..40})"
   write_config "$GOOD"
   echo "VICTIM" >"$HOME/victim.txt"
   /bin/ln -s "$HOME/victim.txt" "$(config_path).bak"
-  run main setup <<<$'y\nsolo\nAda\na@b.co\n\n\nn\nn\n\n'
+  run main setup <<<$'3\nsolo\nAda\na@b.co\n\n\nn\nn\n\n'
   [ "$status" -eq 0 ]
   [ "$(cat "$HOME/victim.txt")" = "VICTIM" ]
   [ -f "$(config_path).bak" ] && [ ! -L "$(config_path).bak" ]
@@ -1069,4 +1069,333 @@ c'; do
   local hint
   hint="$(grep 'mac/ghdp allow' <<<"$output")"
   [[ $hint != *touch* ]]
+}
+
+# ------------------------------------------ add and remove a profile
+
+# Answers for "add": name, commit name (default), email, folders, owners, confirm.
+ADD_CROSSED=$'crashed\n\nnew@x.example\n\nnew-acct\n\n'
+
+installed_good() {
+  need_app
+  write_config "$GOOD"
+  main install >/dev/null
+  echo keep >"$(data_dir office)/marker"
+  echo keep >"$(data_dir personal)/marker"
+}
+
+@test "double-clicking setup with profiles offers a menu, and adding is the default" {
+  installed_good
+  run main setup <<<$'\ncrashed\n\nnew@x.example\n\nnew-acct\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *"You have 2 profile(s): office, personal."* ]]
+  [[ $output == *"1) Add a profile"* ]]
+  [[ $output != *"Name for profile 1"* ]]
+  load_config
+  [ "${P_NAMES[*]}" = "office personal crashed" ]
+}
+
+@test "add keeps your other profiles exactly as they were" {
+  installed_good
+  run main add <<<"$ADD_CROSSED"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  load_config
+  [ "${P_NAMES[*]}" = "office personal crashed" ]
+  [ "${P_GIT_NAMES[0]}" = "Ada Lovelace" ] && [ "${P_GIT_EMAILS[0]}" = "1+ada-work@users.noreply.github.com" ]
+  [ "${P_GIT_NAMES[1]}" = "Ada L" ] && [ "${P_GIT_EMAILS[1]}" = "ada@example.org" ]
+  [ "${P_GIT_NAMES[2]}" = "Ada L" ] && [ "${P_GIT_EMAILS[2]}" = "new@x.example" ]
+  [ "${P_OWNERS[2]}" = "new-acct" ]
+  [ "$(cat "$(config_path).bak")" = "$GOOD" ]
+  [ "$(stat -f %Lp "$(config_path)")" = "600" ]
+  [ "$(cat "$(data_dir office)/marker")" = "keep" ] && [ "$(cat "$(data_dir personal)/marker")" = "keep" ]
+  [ -d "$(launcher_path crashed)" ] && [ -d "$(launcher_path office)" ] && [ -d "$(launcher_path personal)" ]
+  grep -qx "owner=new-acct" "$(profile_dir crashed)/guard.rules"
+  [[ $output == *'open "GitHub Desktop - crashed"'* ]]
+  # Short output: nothing about the profiles that did not change.
+  [[ $output != *"Ready: office"* ]] && [[ $output != *"Ready: personal"* ]]
+}
+
+@test "add keeps folders, owners and allowed repos of the others" {
+  need_app
+  write_config '{"version":1,"profiles":[
+    {"name":"office","gitName":"Ada","gitEmail":"ada@work.example","folders":["~/work"],"owners":["Acme","acme-labs"]},
+    {"name":"personal","gitName":"Ada","gitEmail":"ada@home.example","owners":["me"],"repos":["acme/tool"]}]}'
+  main install >/dev/null
+  run main add <<<"$ADD_CROSSED"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  load_config
+  # shellcheck disable=SC2088 # "~/work" is the text kept in profiles.json
+  [ "${P_FOLDERS[0]}" = "~/work" ]
+  [ "$(printf '%s' "${P_OWNERS[0]}" | tr '\n' ' ')" = "Acme acme-labs" ]
+  [ "${P_REPOS[1]}" = "acme/tool" ] && [ -z "${P_REPOS[0]}" ] && [ -z "${P_REPOS[2]}" ]
+  grep -qx "repo=acme/tool" "$(profile_dir personal)/guard.rules"
+}
+
+@test "add can be run again and again" {
+  installed_good
+  main add <<<"$ADD_CROSSED" >/dev/null
+  run main add <<<$'third\n\nthird@x.example\n\nthird-acct\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  load_config
+  [ "${P_NAMES[*]}" = "office personal crashed third" ]
+  [ -d "$(launcher_path third)" ]
+}
+
+@test "add asks again for a bad or used name, a bad name on commits and a bad email" {
+  installed_good
+  mkdir -p "$(data_dir leftover)"
+  run main add <<<$'Office\nbad name!\nleftover\ncrashed\nA"B\nAda\nnope\nnew@x.example\n\nnew-acct\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *"already have a profile with that name"* ]]
+  [[ $output == *"That name is not allowed"* ]]
+  [[ $output == *'A profile called "leftover" already has data on this Mac'* ]]
+  [[ $output == *"Please type your name"* ]]
+  [[ $output == *"does not look like an email"* ]]
+  load_config
+  [ "${P_NAMES[*]}" = "office personal crashed" ]
+  [ "${P_GIT_NAMES[2]}" = "Ada" ]
+}
+
+@test "add: saying no at the end changes nothing" {
+  installed_good
+  run main add <<<$'crashed\n\nnew@x.example\n\nnew-acct\nn\n'
+  [ "$status" -eq 0 ]
+  [[ $output == *"Nothing changed"* ]]
+  [ "$(cat "$(config_path)")" = "$GOOD" ]
+  [ ! -e "$(launcher_path crashed)" ] && [ ! -e "$(data_dir crashed)" ]
+}
+
+@test "add: cancelling half way (end of input) changes nothing" {
+  installed_good
+  run main add <<<$'crashed\n'
+  refused_with "cancelled"
+  [ "$(cat "$(config_path)")" = "$GOOD" ]
+  [ ! -e "$(launcher_path crashed)" ]
+}
+
+@test "add refuses at 20 profiles, with the next step" {
+  need_app
+  local json='{"version":1,"profiles":[' i sep=""
+  for i in $(seq 1 20); do
+    json="$json$sep{\"name\":\"p$i\",\"gitName\":\"Ada\",\"gitEmail\":\"p$i@x.example\"}"
+    sep=","
+  done
+  write_config "$json]}"
+  run main add <<<$'p21\n'
+  refused_with "limit"
+  refused_with "ghdp remove"
+}
+
+@test "add refuses without profiles or with a broken profiles.json, and never overwrites" {
+  need_app
+  run main add <<<$'x\n'
+  refused_with "No profiles.json"
+  write_config '{bad json'
+  run main add <<<$'x\n'
+  refused_with "not valid JSON"
+  [ "$(cat "$(config_path)")" = '{bad json' ]
+}
+
+@test "setup menu: asks again on a wrong choice, and 4 refreshes without changes" {
+  installed_good
+  run main setup <<<$'x\n9\n4\n'
+  [ "$status" -eq 0 ]
+  [[ $output == *"Please type 1, 2, 3 or 4"* ]]
+  [[ $output == *"Ready: personal"* ]]
+  [ "$(cat "$(config_path)")" = "$GOOD" ]
+}
+
+@test "setup with a broken profiles.json explains it instead of showing the menu" {
+  need_app
+  write_config '{bad json'
+  run main setup <<<$'n\n'
+  refused_with "not valid JSON"
+  [[ $output == *"has a problem"* ]]
+  [[ $output != *"1) Add a profile"* ]]
+  [ "$(cat "$(config_path)")" = '{bad json' ]
+}
+
+@test "remove takes a profile away and keeps its data" {
+  installed_good
+  run main remove personal <<<$'y\nn\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  load_config
+  [ "${P_NAMES[*]}" = "office" ]
+  [ "${P_GIT_EMAILS[0]}" = "1+ada-work@users.noreply.github.com" ]
+  [ ! -e "$(launcher_path personal)" ] && [ -d "$(launcher_path office)" ]
+  [ ! -e "$(profile_dir personal)/guard.rules" ]
+  [ "$(cat "$(data_dir personal)/marker")" = "keep" ]
+  [ "$(cat "$(data_dir office)/marker")" = "keep" ]
+  [ "$(cat "$(config_path).bak")" = "$GOOD" ]
+  [[ $output == *"Its data is still here"* ]]
+}
+
+@test "remove asks for the name when you give none, and is case-insensitive about nothing else" {
+  installed_good
+  run main remove <<<$'nobody\n'
+  refused_with 'no profile called "nobody"'
+  run main remove <<<$'personal\ny\nn\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  load_config
+  [ "${P_NAMES[*]}" = "office" ]
+}
+
+@test "remove: saying no changes nothing" {
+  installed_good
+  run main remove personal <<<$'n\n'
+  [ "$status" -eq 0 ]
+  [[ $output == *"Nothing changed"* ]]
+  [ "$(cat "$(config_path)")" = "$GOOD" ]
+  [ -d "$(launcher_path personal)" ]
+}
+
+@test "remove moves the data to the Trash only when you say yes" {
+  installed_good
+  move_to_trash() { /bin/mkdir -p "$HOME/.Trash" && /bin/mv "$1" "$HOME/.Trash/"; }
+  run main remove personal <<<$'y\ny\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ ! -e "$(profile_dir personal)" ]
+  [ -f "$HOME/.Trash/personal/desktop-data/marker" ]
+  [ -d "$(data_dir office)" ]
+}
+
+@test "remove does nothing while that profile's GitHub Desktop is still open" {
+  installed_good
+  /bin/mkdir -p "$(data_dir personal)/Local Storage/leveldb"
+  : >"$(data_dir personal)/Local Storage/leveldb/LOCK"
+  exec 8<"$(data_dir personal)/Local Storage/leveldb/LOCK"
+  run main remove personal <<<$'y\ny\n'
+  exec 8<&-
+  refused_with "Nothing was changed"
+  [ "$(cat "$(config_path)")" = "$GOOD" ]
+  [ -d "$(launcher_path personal)" ] && [ -f "$(data_dir personal)/marker" ]
+}
+
+@test "remove refuses the last profile and unknown names" {
+  need_app
+  write_config '{"version":1,"profiles":[{"name":"solo","gitName":"Ada","gitEmail":"a@b.co"}]}'
+  main install >/dev/null
+  run main remove solo <<<$'y\n'
+  refused_with "only profile"
+  refused_with "uninstall-mac.command"
+  write_config "$GOOD"
+  run main remove ghost
+  refused_with 'no profile called "ghost"'
+  run main remove a b
+  refused_with "one profile name"
+}
+
+@test "after remove, the guard no longer points to the removed profile" {
+  need_app
+  write_config '{"version":1,"profiles":[
+    {"name":"office","gitName":"Ada","gitEmail":"ada@work.example","owners":["Acme"]},
+    {"name":"personal","gitName":"Ada","gitEmail":"ada@home.example","owners":["me"]}]}'
+  main install >/dev/null
+  load_config
+  new_repo "$HOME/stuff/x" "https://github.com/acme/x.git"
+  run as_profile personal git -C "$HOME/stuff/x" commit -q -m test
+  refused_with 'set for the "office" profile'
+  main remove office <<<$'y\nn\n' >/dev/null
+  run as_profile personal git -C "$HOME/stuff/x" commit -q -m test
+  refused_with "which this profile does not use"
+  [[ $output != *'"office" profile'* ]]
+}
+
+@test "setup menu option 2 removes a profile" {
+  installed_good
+  run main setup <<<$'2\npersonal\ny\nn\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  load_config
+  [ "${P_NAMES[*]}" = "office" ]
+}
+
+@test "a removed profile's name needs a new name when added again (its old data is kept apart)" {
+  installed_good
+  main remove personal <<<$'y\nn\n' >/dev/null
+  run main add <<<$'personal\nagain\n\nagain@x.example\n\nagain-acct\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *'A profile called "personal" already has data'* ]]
+  load_config
+  [ "${P_NAMES[*]}" = "office again" ]
+}
+
+# --- add and remove: more cases
+
+@test "removing the middle profile keeps every other profile's own settings in line" {
+  need_app
+  write_config '{"version":1,"profiles":[
+    {"name":"one","gitName":"A One","gitEmail":"one@x.example","folders":["~/one"],"owners":["own-one"]},
+    {"name":"two","gitName":"A Two","gitEmail":"two@x.example","owners":["own-two"],"repos":["own-one/shared"]},
+    {"name":"three","gitName":"A Three","gitEmail":"three@x.example","folders":["~/three"],"repos":["own-two/tool"]}]}'
+  main install >/dev/null
+  run main remove two <<<$'y\nn\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  load_config
+  [ "${P_NAMES[*]}" = "one three" ]
+  [ "${P_GIT_NAMES[0]}" = "A One" ] && [ "${P_GIT_EMAILS[0]}" = "one@x.example" ]
+  [ "${P_GIT_NAMES[1]}" = "A Three" ] && [ "${P_GIT_EMAILS[1]}" = "three@x.example" ]
+  # shellcheck disable=SC2088 # text kept in profiles.json
+  [ "${P_FOLDERS[0]}" = "~/one" ] && [ "${P_FOLDERS[1]}" = "~/three" ]
+  [ "${P_OWNERS[0]}" = "own-one" ] && [ -z "${P_OWNERS[1]}" ]
+  [ -z "${P_REPOS[0]}" ] && [ "${P_REPOS[1]}" = "own-two/tool" ]
+  grep -qx "repo=own-two/tool" "$(profile_dir three)/guard.rules"
+  run grep -q "own-one/shared" "$(profile_dir three)/guard.rules"
+  [ "$status" -ne 0 ]
+}
+
+@test "removing the first and then the last profile works too" {
+  installed_good
+  main add <<<"$ADD_CROSSED" >/dev/null
+  run main remove office <<<$'y\nn\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  run main remove crashed <<<$'y\nn\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  load_config
+  [ "${P_NAMES[*]}" = "personal" ] && [ "${P_GIT_EMAILS[0]}" = "ada@example.org" ]
+  [ -d "$(launcher_path personal)" ] && [ ! -e "$(launcher_path office)" ] && [ ! -e "$(launcher_path crashed)" ]
+}
+
+@test "add without folders or owners nudges for owners, and you can skip it" {
+  installed_good
+  run main add <<<$'solo\n\nsolo@x.example\n\n\ny\nacme\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *"can only check the email"* ]]
+  load_config
+  [ "${P_OWNERS[2]}" = "acme" ]
+  run main add <<<$'lone\n\nlone@x.example\n\n\nn\n\n'
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [[ $output == *"New profile: lone"* ]]
+  load_config
+  [ "${P_NAMES[*]}" = "office personal solo lone" ] && [ -z "${P_OWNERS[3]}" ]
+}
+
+@test "add and remove stop when GitHub Desktop is missing" {
+  installed_good
+  find_app() { return 1; }
+  run main add <<<"$ADD_CROSSED"
+  refused_with "GitHub Desktop is not installed"
+  [ "$(cat "$(config_path)")" = "$GOOD" ]
+}
+
+@test "attack: a planted link at profiles.json.bak is not written through when adding" {
+  installed_good
+  echo VICTIM >"$HOME/victim.txt"
+  /bin/rm -f "$(config_path).bak"
+  /bin/ln -s "$HOME/victim.txt" "$(config_path).bak"
+  run main add <<<"$ADD_CROSSED"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$(cat "$HOME/victim.txt")" = "VICTIM" ]
+  [ -f "$(config_path).bak" ] && [ ! -L "$(config_path).bak" ]
+}
+
+@test "attack: a linked profile folder is never deleted or followed by remove" {
+  installed_good
+  /bin/mkdir -p "$HOME/elsewhere"
+  echo keep >"$HOME/elsewhere/guard.rules"
+  echo keep >"$HOME/elsewhere/data.txt"
+  /bin/rm -rf "$(profile_dir personal)"
+  /bin/ln -s "$HOME/elsewhere" "$(profile_dir personal)"
+  main remove personal <<<$'y\ny\n' >/dev/null 2>&1 || true
+  [ "$(cat "$HOME/elsewhere/guard.rules")" = "keep" ]
+  [ "$(cat "$HOME/elsewhere/data.txt")" = "keep" ]
 }

@@ -11,7 +11,9 @@
 #   - needs no admin rights and never edits your global Git config
 #
 # Commands:
-#   ghdp setup                        guided setup: asks for your profiles
+#   ghdp setup                        guided setup (a menu if you already have profiles)
+#   ghdp add                          add one more profile; the others stay as they are
+#   ghdp remove [name]                remove a profile (its data is kept unless you say so)
 #   ghdp init                         create your profiles.json from the example
 #   ghdp install                      set up profile folders and launchers
 #   ghdp launch <name> [--dry-run]    open GitHub Desktop with a profile
@@ -51,6 +53,9 @@ W_GIT_EMAILS=()
 W_FOLDERS=()
 W_OWNERS=()
 W_REPOS=()
+
+# 1 while add/remove run the install step: it then prints less.
+INSTALL_QUIET=0
 
 # ---------------------------------------------------------------- messages
 
@@ -881,7 +886,7 @@ write_guard() {
 remove_stale_guards() {
   local d base i keep
   for d in "$(base_dir)/profiles/"*/; do
-    if [ ! -f "${d}guard.rules" ]; then continue; fi
+    if [ -L "${d%/}" ] || [ ! -f "${d}guard.rules" ]; then continue; fi # never follow a link
     base="$(/usr/bin/basename "$d")"
     keep=0
     i=0
@@ -1273,6 +1278,27 @@ global_git_value() {
   /usr/bin/env -u GIT_CONFIG_GLOBAL "$2/Contents/Resources/app/git/bin/git" config --global --get "$1" 2>/dev/null || true
 }
 
+# "personal, office, work": the profile names, for messages.
+profile_names() {
+  local i=0 out=""
+  while [ "$i" -lt "${#P_NAMES[@]}" ]; do
+    out="$out${out:+, }${P_NAMES[$i]}"
+    i=$((i + 1))
+  done
+  printf '%s' "$out"
+}
+
+# Start from the profiles already in profiles.json (after load_config), so
+# the wizard can add to them or take one away without asking for the rest.
+wizard_from_config() {
+  W_NAMES=("${P_NAMES[@]}")
+  W_GIT_NAMES=("${P_GIT_NAMES[@]}")
+  W_GIT_EMAILS=("${P_GIT_EMAILS[@]}")
+  W_FOLDERS=("${P_FOLDERS[@]}")
+  W_OWNERS=("${P_OWNERS[@]}")
+  W_REPOS=("${P_REPOS[@]}")
+}
+
 add_wizard_profile() {
   W_NAMES+=("$1")
   W_GIT_NAMES+=("$2")
@@ -1338,6 +1364,29 @@ cmd_init() {
 
 # Guided setup: asks for your profiles, can copy your current GitHub Desktop
 # into the first one, writes profiles.json and installs the launchers.
+# What to do when you already have profiles. Returns 0 only for "start
+# over" (the caller then runs the full wizard); the other choices do their
+# work here and return 1.
+setup_menu() {
+  local choice
+  say "You have ${#P_NAMES[@]} profile(s): $(profile_names)."
+  say "What do you want to do?"
+  say "  1) Add a profile"
+  say "  2) Remove a profile"
+  say "  3) Start over (replaces ALL profiles; profiles.json is backed up)"
+  say "  4) Nothing, just refresh the launchers"
+  while true; do
+    choice="$(ask "Choose 1-4" 1)" || exit 1
+    case "$choice" in
+      1) say ""; cmd_add; return 1 ;;
+      2) say ""; cmd_remove; return 1 ;;
+      3) return 0 ;;
+      4) say ""; cmd_install; return 1 ;;
+    esac
+    tell "  Please type 1, 2, 3 or 4."
+  done
+}
+
 cmd_setup() {
   local app cfg def_name def_email n gname gemail import="" last i pd dd
   [ "$#" -eq 0 ] || die "setup does not take options." "Run: ghdp setup"
@@ -1351,12 +1400,18 @@ cmd_setup() {
   ensure_private_dir "$(base_dir)"
   cfg="$(config_path)"
   if [ -e "$cfg" ] || [ -L "$cfg" ]; then
-    say "You already have profiles. A new setup replaces them (your old profiles.json is kept as a backup)."
-    say "If you say no, your profiles are kept and their launchers are installed again."
-    if ! ask_yes "Start a new setup?" n; then
-      say ""
-      cmd_install
-      return 0
+    if ( load_config ) >/dev/null 2>&1; then
+      load_config
+      setup_menu || return 0
+    else
+      say "You already have a profiles.json, but it has a problem."
+      say "A new setup replaces it (your old profiles.json is kept as a backup)."
+      say "If you say no, nothing is replaced and the problem is shown."
+      if ! ask_yes "Start a new setup?" n; then
+        say ""
+        cmd_install
+        return 0
+      fi
     fi
   fi
 
@@ -1475,12 +1530,7 @@ cmd_allow() {
   [ "$n" -lt "$MAX_RULES" ] || die "\"$1\" already has $MAX_RULES allowed repos, which is the limit." \
     "Remove one from \"repos\" in profiles.json first."
   P_REPOS[i]="${P_REPOS[$i]}${P_REPOS[$i]:+$nl}$repo"
-  W_NAMES=("${P_NAMES[@]}")
-  W_GIT_NAMES=("${P_GIT_NAMES[@]}")
-  W_GIT_EMAILS=("${P_GIT_EMAILS[@]}")
-  W_FOLDERS=("${P_FOLDERS[@]}")
-  W_OWNERS=("${P_OWNERS[@]}")
-  W_REPOS=("${P_REPOS[@]}")
+  wizard_from_config
   write_profiles_json
   pd="$(profile_dir "$1")" || exit 1
   ensure_private_dir "$(base_dir)/profiles"
@@ -1489,6 +1539,109 @@ cmd_allow() {
   say "Done. \"$1\" can now commit and push to $repo."
   say "Other repos of that owner stay protected. The guard still checks the email."
   say "(Your old profiles.json is kept as a backup: profiles.json.bak)"
+}
+
+# Add one profile. The profiles you already have are not asked about and
+# not changed. Nothing is written until you confirm.
+cmd_add() {
+  local last n gname gemail
+  [ "$#" -eq 0 ] || die "add does not take options." "Run: ghdp add"
+  check_home
+  load_config
+  [ "${#P_NAMES[@]}" -lt "$MAX_PROFILES" ] || die "You already have $MAX_PROFILES profiles, which is the limit." \
+    "Remove one first: ghdp remove <name>"
+  verified_app >/dev/null || exit 1
+  ensure_private_dir "$(base_dir)"
+  say "Add a profile. Your other profiles ($(profile_names)) are not changed."
+  wizard_from_config
+  last=$((${#W_GIT_NAMES[@]} - 1))
+  n="$(ask_profile_name $((${#W_NAMES[@]} + 1)) new)" || exit 1
+  gname="$(ask_git_name "${W_GIT_NAMES[$last]}")" || exit 1
+  gemail="$(ask_email "")" || exit 1
+  add_wizard_profile "$n" "$gname" "$gemail"
+  ask_rules
+  last=$((${#W_NAMES[@]} - 1))
+  say ""
+  say "New profile: $n: $gname <$gemail>"
+  if [ -n "${W_FOLDERS[$last]}" ]; then say "  folders: $(printf "%s" "${W_FOLDERS[$last]}" | /usr/bin/tr "\n" " ")"; fi
+  if [ -n "${W_OWNERS[$last]}" ]; then say "  owners: $(printf "%s" "${W_OWNERS[$last]}" | /usr/bin/tr "\n" " ")"; fi
+  if ! ask_yes "Add this profile?" y; then
+    say "Nothing changed."
+    return 0
+  fi
+  write_profiles_json
+  INSTALL_QUIET=1
+  cmd_install
+  INSTALL_QUIET=0
+  say ""
+  say "Added \"$n\": $(launcher_path "$n")"
+  say "Next: open \"GitHub Desktop - $n\" and sign in to its account. Keep it the"
+  say "only GitHub Desktop window open while you sign in."
+}
+
+# Remove one profile: its launcher and guard rules go. Its data (login,
+# repo list, settings) stays on your Mac unless you ask for the Trash. The
+# sign-in itself lives in the Keychain and is never touched here.
+cmd_remove() {
+  local i j name pd answer trash=0
+  [ "$#" -le 1 ] || die "remove takes one profile name." "Run: ghdp remove <name>"
+  check_home
+  load_config
+  [ "${#P_NAMES[@]}" -gt 1 ] || die "\"${P_NAMES[0]}\" is your only profile." \
+    "To remove everything, run uninstall-mac.command."
+  if [ "$#" -eq 1 ]; then
+    name="$1"
+  else
+    say "Your profiles: $(profile_names)."
+    name="$(ask "Name of the profile to remove")" || exit 1
+  fi
+  i="$(find_profile "$name")" || die "There is no profile called \"$name\"." "Your profiles: $(profile_names)"
+  name="${P_NAMES[$i]}"
+  pd="$(profile_dir "$name")" || exit 1
+  say "This removes the launcher \"GitHub Desktop - $name\" and its guard rules."
+  say "Its login, repo list and settings stay on your Mac unless you choose the Trash."
+  say "Tip: to sign this account out, do it inside that profile BEFORE removing it."
+  ask_yes "Remove the profile \"$name\"?" n || {
+    say "Nothing changed."
+    return 0
+  }
+  if [ -d "$pd" ] && [ ! -L "$pd" ] && ask_yes "Also move its data to the Trash?" n; then
+    trash=1
+    while desktop_holds_data "$(data_dir "$name")"; do
+      say "Please quit the \"$name\" GitHub Desktop window first (Cmd+Q in it)."
+      read -r -p "Then press Return to continue: " answer || die "Nothing was changed." "Run remove again when you are ready."
+    done
+  fi
+  W_NAMES=()
+  W_GIT_NAMES=()
+  W_GIT_EMAILS=()
+  W_FOLDERS=()
+  W_OWNERS=()
+  W_REPOS=()
+  j=0
+  while [ "$j" -lt "${#P_NAMES[@]}" ]; do
+    if [ "$j" -ne "$i" ]; then
+      W_NAMES+=("${P_NAMES[$j]}")
+      W_GIT_NAMES+=("${P_GIT_NAMES[$j]}")
+      W_GIT_EMAILS+=("${P_GIT_EMAILS[$j]}")
+      W_FOLDERS+=("${P_FOLDERS[$j]}")
+      W_OWNERS+=("${P_OWNERS[$j]}")
+      W_REPOS+=("${P_REPOS[$j]}")
+    fi
+    j=$((j + 1))
+  done
+  write_profiles_json
+  INSTALL_QUIET=1
+  cmd_install
+  INSTALL_QUIET=0
+  say ""
+  if [ "$trash" -eq 1 ]; then
+    move_to_trash "$pd"
+    say "Moved its data to the Trash: $pd"
+  elif [ -d "$pd" ]; then
+    say "Its data is still here (you can delete the folder yourself): $pd"
+  fi
+  say "Removed \"$name\"."
 }
 
 cmd_install() {
@@ -1503,15 +1656,17 @@ cmd_install() {
   while [ "$i" -lt "${#P_NAMES[@]}" ]; do
     prepare_profile "$i" "$app"
     make_launcher "${P_NAMES[$i]}" "$app" "$i"
-    say "Ready: ${P_NAMES[$i]} -> $(launcher_path "${P_NAMES[$i]}")"
+    if [ "$INSTALL_QUIET" != "1" ]; then say "Ready: ${P_NAMES[$i]} -> $(launcher_path "${P_NAMES[$i]}")"; fi
     i=$((i + 1))
   done
   remove_stale_launchers
   remove_stale_guards
-  say ""
-  say "Done. In Finder, open your home folder > Applications and double-click"
-  say "\"GitHub Desktop - ${P_NAMES[0]}\"."
-  say "Tip: sign in to each profile while it is the only GitHub Desktop window open."
+  if [ "$INSTALL_QUIET" != "1" ]; then
+    say ""
+    say "Done. In Finder, open your home folder > Applications and double-click"
+    say "\"GitHub Desktop - ${P_NAMES[0]}\"."
+    say "Tip: sign in to each profile while it is the only GitHub Desktop window open."
+  fi
 }
 
 # True if any profile's GitHub Desktop window is still open.
@@ -1668,6 +1823,8 @@ main() {
   if [ "$#" -gt 0 ]; then shift; fi
   case "$cmd" in
     setup) cmd_setup "$@" ;;
+    add) cmd_add "$@" ;;
+    remove) cmd_remove "$@" ;;
     init) cmd_init ;;
     install) cmd_install "$@" ;;
     launch) cmd_launch "$@" ;;
