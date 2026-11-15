@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "timonwong.shellcheck",
+    "ms-vscode.powershell",
+    "editorconfig.editorconfig"
+  ]
+}

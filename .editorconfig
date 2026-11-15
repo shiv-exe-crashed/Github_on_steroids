@@ -1,0 +1,21 @@
+# EditorConfig keeps formatting the same in every editor.
+# Docs: https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Markdown uses two trailing spaces for line breaks, so keep them.
+[*.md]
+trim_trailing_whitespace = false
+
+# PowerShell: 4 spaces is the common style. A BOM keeps Windows
+# PowerShell 5.1 from misreading any non-ASCII character.
+[*.{ps1,psm1,psd1}]
+indent_size = 4
+charset = utf-8-bom

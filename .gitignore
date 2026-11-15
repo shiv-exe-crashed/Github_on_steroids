@@ -1,0 +1,19 @@
+# Your real profile config holds names and emails. Never commit it.
+# Commit only profiles.example.json (placeholders).
+profiles.json
+*.local.json
+.env
+.env.*
+
+# Operating system clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test and release output
+/test-results/
+/dist/
+
+# Editor files (keep the shared extension list)
+.vscode/*
+!.vscode/extensions.json
