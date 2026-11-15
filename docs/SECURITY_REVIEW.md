@@ -64,4 +64,4 @@ are fixed and tested:
 | A profile signed in to the wrong account. | The guard never touches tokens, so it cannot see this. Check Settings → Accounts after signing in. |
 | The guard hook uses tools from GitHub Desktop's `PATH`. | Only malware running as you could change that `PATH`. |
 | `NODE_EXTRA_CA_CERTS` set for your whole session could help intercept GitHub Desktop's HTTPS. | Company proxies use it legitimately. Only someone already on your account can set it. |
-| GitHub Desktop's optional "hooks environment" setting may replace the guard's hooks path. | Off by default in the stable release. |
+| GitHub Desktop's Git hooks support (Settings → Git → Hooks, added in 3.5.5) might change which hooks folder Git uses, which could skip the guard. | **Not verified.** GitHub's pages do not say it sets a hooks path, and the guard did stop a commit in GitHub Desktop 3.6.11 during our hand tests. Plain Git does let a hooks path set through `GIT_CONFIG_PARAMETERS` win over ours, so this stays on the list until it is tested with the setting on and off. Identity (name and email) does not depend on it. |
