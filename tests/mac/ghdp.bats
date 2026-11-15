@@ -875,9 +875,13 @@ teammate_commit() {
 
 @test "guard refuses a remote whose owner cannot be read" {
   setup_guard
-  new_repo "$HOME/work/odd" "https://github.com/ac%me/x.git"
+  new_repo "$HOME/work/odd" "https://github.com/ac_me/x.git"
   run as_profile office git -C "$HOME/work/odd" commit -q -m test
   refused_with "Could not read the GitHub owner"
+  # A %-escape is stopped even earlier, as an unusual URL shape.
+  git -C "$HOME/work/odd" remote set-url origin "https://github.com/ac%me/x.git"
+  run as_profile office git -C "$HOME/work/odd" commit -q -m test
+  refused_with "unusual shape"
 }
 
 @test "merge commits are guarded too" {
@@ -1398,4 +1402,101 @@ installed_good() {
   main remove personal <<<$'y\ny\n' >/dev/null 2>&1 || true
   [ "$(cat "$HOME/elsewhere/guard.rules")" = "keep" ]
   [ "$(cat "$HOME/elsewhere/data.txt")" = "keep" ]
+}
+
+# --- independent review: URL tricks, half-finished installs, changed config
+
+# Run the generated pre-push hook of a profile for one remote URL.
+push_check() {
+  run as_profile "$1" sh "$(profile_dir "$1")/hooks/pre-push" origin "$2" </dev/null
+}
+
+@test "attack: URL tricks cannot make the guard read a different owner than Git contacts" {
+  setup_owner_guard
+  cmd_allow personal acme/tool >/dev/null
+  load_config
+  local url
+  # shellcheck disable=SC2016 # no expansion wanted in these URLs
+  for url in \
+    "https://github.com/me/x/../../acme/secret" \
+    "https://github.com/acme/tool/../../acme/secret" \
+    "https://github.com/me/x/./y" \
+    "https://github.com/me/x%2f..%2facme/secret" \
+    "https://github.com/me/x?y=1" \
+    "https://github.com/me/x#y" \
+    "https://github.com/me/x y" \
+    'https://github.com/me/x\y' \
+    "https://github.com/me/éx" \
+    "work-github:../acme/secret"; do
+    push_check personal "$url"
+    [ "$status" -ne 0 ] || { echo "should be refused: $url"; return 1; }
+  done
+}
+
+@test "an allowed repo means exactly owner/name, nothing longer or similar" {
+  setup_owner_guard
+  cmd_allow personal acme/tool >/dev/null
+  load_config
+  local url
+  for url in "https://github.com/acme/tool.git/extra" "https://github.com/acme/tool/more/x" \
+    "https://github.com/acme/tool-two" "https://github.com/acme/too" "https://github.com/acme/other"; do
+    push_check personal "$url"
+    [ "$status" -ne 0 ] || { echo "should be refused: $url"; return 1; }
+  done
+}
+
+@test "normal remotes still pass the shape check" {
+  setup_owner_guard
+  cmd_allow personal acme/tool >/dev/null
+  load_config
+  local url
+  for url in "https://github.com/me/x" "https://github.com/ME/X.git/" "https://user:p%40ss@github.com/me/x" \
+    "git@github.com:me/x.git" "ssh://git@github.com/me/x" "https://github.com/acme/tool.git" \
+    "$HOME/My Backups/x.git" "file:///tmp/some where/x.git"; do
+    push_check personal "$url"
+    [ "$status" -eq 0 ] || { echo "should be allowed: $url"; echo "$output"; return 1; }
+  done
+}
+
+@test "the guard's lowercase step does not depend on the user's language settings" {
+  grep -q "LC_ALL=C tr '\[:upper:\]' '\[:lower:\]'" <(hook_script)
+}
+
+@test "add stops with a clear hint if the launchers cannot be finished, and cleans up" {
+  installed_good
+  # shellcheck disable=SC2329 # called by the tool, not by this test
+  make_launcher() { die "Pretend problem." "Fix it."; }
+  run main add <<<"$ADD_CROSSED"
+  refused_with "profiles.json was already updated"
+  refused_with "ghdp install"
+  load_config
+  [ "${P_NAMES[*]}" = "office personal crashed" ]
+}
+
+@test "remove cleans the removed profile's guard rules even if installing fails afterwards" {
+  installed_good
+  # shellcheck disable=SC2329 # called by the tool, not by this test
+  make_launcher() { die "Pretend problem." "Fix it."; }
+  run main remove personal <<<$'y\nn\n'
+  refused_with "profiles.json was already updated"
+  [ ! -e "$(profile_dir personal)/guard.rules" ]
+  [ -f "$(data_dir personal)/marker" ]
+}
+
+@test "add and remove do not overwrite a profiles.json that changed while you answered" {
+  installed_good
+  # shellcheck disable=SC2329 # called by the tool, not by this test
+  ask_email() { cmd_allow personal acme/tool >/dev/null; printf '%s' new@x.example; }
+  run main add <<<$'crashed\n\n\nnew-acct\n\n'
+  refused_with "changed while you were answering"
+  load_config
+  [ "${P_NAMES[*]}" = "office personal" ]
+  [ "${P_REPOS[1]}" = "acme/tool" ]
+  unset -f ask_email
+  # shellcheck disable=SC2329 # called by the tool, not by this test
+  ask_yes() { cmd_allow office acme/tool2 >/dev/null; return 0; }
+  run main remove personal
+  refused_with "changed while you were answering"
+  load_config
+  [ "${P_NAMES[*]}" = "office personal" ] && [ "${P_REPOS[0]}" = "acme/tool2" ]
 }

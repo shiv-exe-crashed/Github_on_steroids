@@ -584,7 +584,7 @@ profile_home=$(cd "$here/.." && pwd -P)
 rules="$profile_home/guard.rules"
 
 rule() { if [ -f "$rules" ]; then grep "^$1=" "$rules" | cut -d= -f2-; fi; }
-lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+lower() { printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]'; }
 real_dir() { if [ -d "$1" ]; then (cd "$1" && pwd -P); else printf '%s' "$1"; fi; }
 
 # Print why we stopped and fail the hook. Control characters (which could
@@ -637,15 +637,29 @@ owner_of() {
   lower "${rpath%%/*}"
 }
 
-# "owner/name" in lower case, without ".git" and without anything after the
-# name (nothing if the URL has no repo part).
+# "owner/name" in lower case, without ".git". Nothing unless the path is
+# exactly owner/name (a trailing slash is fine): "owner/name/more" is not a
+# repo we recognise.
 repo_of() {
   rpath=$(path_of "$1")
-  case $rpath in */*) ;; *) return 0 ;; esac
+  rpath=${rpath%/}
+  case $rpath in */*/*) return 0 ;; */*) ;; *) return 0 ;; esac
   rname=${rpath#*/}
-  rname=${rname%%/*}
   rname=${rname%.git}
   lower "${rpath%%/*}/$rname"
+}
+
+# True if a remote URL has a shape that could make the text we read differ
+# from the place Git really contacts: "." or ".." segments (curl squashes
+# them), %-escapes, ? and #, backslashes, spaces, or non-ASCII characters.
+# $1 is the whole URL, $2 the part after the host.
+odd_url() {
+  case $1 in *\\*) return 0 ;; esac
+  rcheck="/$2/"
+  case $rcheck in
+    */./* | */../* | *%* | *\?* | *'#'* | *\\* | *' '*) return 0 ;;
+  esac
+  case $(printf '%s' "$2" | LC_ALL=C tr -d ' -~') in '') return 1 ;; *) return 0 ;; esac
 }
 
 # A remote URL without any "user:token@" part, safe to show on screen.
@@ -735,6 +749,11 @@ check_owner() {
     *[[:cntrl:]]*) stop "The remote URL of this repo has unusual characters, so it could not be checked." \
       "Fix the remote URL in this repo, then try again." ;;
   esac
+  rpath=$(path_of "$1")
+  if [ -n "$rpath" ] && odd_url "$1" "$rpath"; then
+    stop "The remote $(safe_url "$1") has an unusual shape (for example \"..\", a % sign, a space or odd letters), so it could not be checked safely." \
+      "Fix the remote URL in this repo, then try again."
+  fi
   o=$(owner_of "$1")
   [ -n "$o" ] || return 0
   case $o in
@@ -1541,13 +1560,33 @@ cmd_allow() {
   say "(Your old profiles.json is kept as a backup: profiles.json.bak)"
 }
 
+# The install step after add or remove. profiles.json is already written at
+# this point, so if the step fails we say so and what to do. It runs in a
+# subshell with "set -e" on, so a failing step stops it exactly as before.
+install_after_change() {
+  local rc=0 errexit=0
+  case $- in *e*) errexit=1 ;; esac
+  INSTALL_QUIET=1
+  set +e
+  (
+    set -e
+    cmd_install
+  )
+  rc=$?
+  if [ "$errexit" = "1" ]; then set -e; fi
+  INSTALL_QUIET=0
+  [ "$rc" -eq 0 ] || die "profiles.json was already updated, but the launchers could not be finished." \
+    "Fix the problem above, then run: ghdp install"
+}
+
 # Add one profile. The profiles you already have are not asked about and
 # not changed. Nothing is written until you confirm.
 cmd_add() {
-  local last n gname gemail
+  local last n gname gemail snap
   [ "$#" -eq 0 ] || die "add does not take options." "Run: ghdp add"
   check_home
   load_config
+  snap="$(/usr/bin/cksum <"$CONFIG")" || exit 1
   [ "${#P_NAMES[@]}" -lt "$MAX_PROFILES" ] || die "You already have $MAX_PROFILES profiles, which is the limit." \
     "Remove one first: ghdp remove <name>"
   verified_app >/dev/null || exit 1
@@ -1569,10 +1608,10 @@ cmd_add() {
     say "Nothing changed."
     return 0
   fi
+  [ "$(/usr/bin/cksum <"$CONFIG")" = "$snap" ] || die "profiles.json changed while you were answering, so nothing was saved." \
+    "Run the command again."
   write_profiles_json
-  INSTALL_QUIET=1
-  cmd_install
-  INSTALL_QUIET=0
+  install_after_change
   say ""
   say "Added \"$n\": $(launcher_path "$n")"
   say "Next: open \"GitHub Desktop - $n\" and sign in to its account. Keep it the"
@@ -1583,10 +1622,11 @@ cmd_add() {
 # repo list, settings) stays on your Mac unless you ask for the Trash. The
 # sign-in itself lives in the Keychain and is never touched here.
 cmd_remove() {
-  local i j name pd answer trash=0
+  local i j name pd answer snap trash=0
   [ "$#" -le 1 ] || die "remove takes one profile name." "Run: ghdp remove <name>"
   check_home
   load_config
+  snap="$(/usr/bin/cksum <"$CONFIG")" || exit 1
   [ "${#P_NAMES[@]}" -gt 1 ] || die "\"${P_NAMES[0]}\" is your only profile." \
     "To remove everything, run uninstall-mac.command."
   if [ "$#" -eq 1 ]; then
@@ -1630,10 +1670,10 @@ cmd_remove() {
     fi
     j=$((j + 1))
   done
+  [ "$(/usr/bin/cksum <"$CONFIG")" = "$snap" ] || die "profiles.json changed while you were answering, so nothing was saved." \
+    "Run the command again."
   write_profiles_json
-  INSTALL_QUIET=1
-  cmd_install
-  INSTALL_QUIET=0
+  install_after_change
   say ""
   if [ "$trash" -eq 1 ]; then
     move_to_trash "$pd"
@@ -1652,6 +1692,10 @@ cmd_install() {
   app="$(verified_app)" || exit 1
   ensure_private_dir "$(base_dir)"
   install_self
+  # Old launchers and guard rules go first, so a failure later on never
+  # leaves a removed profile's rules behind.
+  remove_stale_launchers
+  remove_stale_guards
   i=0
   while [ "$i" -lt "${#P_NAMES[@]}" ]; do
     prepare_profile "$i" "$app"
@@ -1659,8 +1703,6 @@ cmd_install() {
     if [ "$INSTALL_QUIET" != "1" ]; then say "Ready: ${P_NAMES[$i]} -> $(launcher_path "${P_NAMES[$i]}")"; fi
     i=$((i + 1))
   done
-  remove_stale_launchers
-  remove_stale_guards
   if [ "$INSTALL_QUIET" != "1" ]; then
     say ""
     say "Done. In Finder, open your home folder > Applications and double-click"
