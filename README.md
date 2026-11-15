@@ -15,7 +15,7 @@ And a guard that **stops wrong-account commits before they happen.**
 ![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![No network calls](https://img.shields.io/badge/network%20calls-0-brightgreen)
 ![shellcheck](https://img.shields.io/badge/shellcheck-0%20warnings-blue)
-![Tests](https://img.shields.io/badge/tests-112%20passing-success)
+![Tests](https://img.shields.io/badge/tests-119%20passing-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 [**⚡ Install in 2 minutes**](#-install-in-2-minutes) ·
@@ -32,7 +32,7 @@ And a guard that **stops wrong-account commits before they happen.**
 
 <div align="center">
 
-| 🧪 **112** automated tests | 🧨 **5** attack tests | 💬 **79** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
+| 🧪 **119** automated tests | 🧨 **5** attack tests | 💬 **82** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 
 </div>
@@ -343,6 +343,7 @@ handled on purpose. Almost all are covered by automated tests; the rest
 | A force-push the guard can't fully see | The push is stopped instead of guessed. |
 | A token hidden in a remote URL (`https://user:token@…`) | Never shown on screen. |
 | A remote URL with a newline or odd characters | Refused safely, never run. |
+| A remote URL with tricks (`../`, `%2f`, `?`, `#`, spaces) meant to look like another owner | Refused: the guard only trusts URLs it can read exactly as Git will use them. |
 | A local backup remote with spaces in its path | Works. |
 | A repo opened from a browser link lands in the wrong profile | The first commit is stopped, naming the right profile. |
 

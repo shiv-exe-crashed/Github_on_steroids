@@ -54,11 +54,14 @@ are fixed and tested:
 | F19 | A local backup remote with a space in its path was refused. Merge commits skipped the commit checks. `~/Applications` writable by others was not refused. | Low | All three are fixed. |
 | F20 | A refusal message suggests a command to copy (`ghdp allow …`) and takes the repo name from the remote URL. A name like `x;rm -rf ~` could have ended up in a command the user pastes. | Medium | The repo name is shown only if it has plain characters (letters, numbers, `. _ - /`); otherwise a placeholder is shown. The allow list matches whole `owner/name` text only, never patterns. Tested. |
 | F21 | Removing a profile cleans up its guard rules. If its folder had been replaced by a link, that cleanup could delete a file named `guard.rules` in the folder the link points to. | Low | Linked profile folders are skipped. Tested, including a check that the test fails without the fix. |
+| F22 | A remote URL such as `https://github.com/friend/shared/../../other/secret` was read as owner `friend`, but curl squashes the dots, so Git would contact `other/secret`. The same trick worked with plain owners, and an allowed repo matched on its first two path parts only. | Medium | The guard now refuses URLs with `.` or `..` segments, `%`, `?`, `#`, backslashes, spaces or non-ASCII letters. An allowed repo must match the whole `owner/name`. The hook lowercases in plain ASCII, whatever the user's language settings. Found by an independent review; tested with more than 20 URL cases. |
+| F23 | If the launcher step failed after add or remove had saved profiles.json, a removed profile's guard rules could be left behind, with no hint that profiles.json had already changed. Two commands run at the same time could overwrite each other's change. | Low | Old launchers and guard rules are now cleaned up first. A failure says that profiles.json was already updated and what to run. Add and remove refuse to save if profiles.json changed while you were answering. Tested. |
 
 ## Accepted risks
 
 | Risk | Why it is accepted |
 |---|---|
+| The guard compares the account names in a remote URL, not the server (host). A remote on another server with a matching owner name passes. | The guard exists to stop wrong-account mistakes. GitHub Enterprise and SSH host aliases are supported on purpose, so the host cannot be pinned. It is not a defence against a hostile remote. |
 | Malware running as you can read GitHub Desktop's tokens. | True without this tool too, because of GitHub Desktop's Electron switches. |
 | Someone with write access to `/Applications` swaps in an **older** genuine GitHub Desktop. | Needs admin or same-user access. A minimum-version check may come later. |
 | A profile signed in to the wrong account. | The guard never touches tokens, so it cannot see this. Check Settings → Accounts after signing in. |

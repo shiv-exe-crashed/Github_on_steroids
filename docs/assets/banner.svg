@@ -41,7 +41,7 @@
     <rect x="376" y="292" width="188" height="38" rx="19" fill="#ffffff" opacity="0.1"/>
     <text x="470" y="317" text-anchor="middle" fill="#e6edf3">0 network calls</text>
     <rect x="576" y="292" width="120" height="38" rx="19" fill="#ffffff" opacity="0.1"/>
-    <text x="636" y="317" text-anchor="middle" fill="#e6edf3">112 tests</text>
+    <text x="636" y="317" text-anchor="middle" fill="#e6edf3">119 tests</text>
   </g>
 
   <!-- Launcher cards -->
