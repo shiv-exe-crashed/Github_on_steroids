@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "name": "office",
+      "gitName": "CHANGE ME",
+      "gitEmail": "CHANGE-ME"
+    },
+    {
+      "name": "personal",
+      "gitName": "CHANGE ME",
+      "gitEmail": "CHANGE-ME"
+    }
+  ]
+}

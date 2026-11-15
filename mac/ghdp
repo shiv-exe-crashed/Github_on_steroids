@@ -1,0 +1,1591 @@
+#!/bin/bash
+# gh-desktop-profiles for Mac.
+#
+# Opens the official GitHub Desktop with a separate profile per GitHub
+# account. Each profile has its own login, its own repo list and its own
+# settings. Plain bash 3.2. No dependencies.
+#
+# Security promises (details in THREAT_MODEL.md):
+#   - never reads, stores, logs or prints tokens or passwords
+#   - makes no network calls
+#   - needs no admin rights and never edits your global Git config
+#
+# Commands:
+#   ghdp setup                        guided setup: asks for your profiles
+#   ghdp init                         create your profiles.json from the example
+#   ghdp install                      set up profile folders and launchers
+#   ghdp launch <name> [--dry-run]    open GitHub Desktop with a profile
+#   ghdp list                         show your profiles and their status
+#   ghdp uninstall                    remove launchers (profile data: you choose)
+#   ghdp help                         show this help
+
+set -euo pipefail
+
+readonly GHDP_VERSION="0.1.0"
+readonly TOOL_ID="io.github.gh-desktop-profiles"
+readonly GHD_BUNDLE_ID="com.github.GitHubClient"
+readonly GHD_TEAM_ID="VEKTX9H2N7" # GitHub's Apple Developer Team ID
+readonly MAX_PROFILES=20
+readonly NAME_RE='^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$'
+readonly EMAIL_RE='^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+readonly SAFE_PATH_RE='^/[A-Za-z0-9 ._/-]+$'
+readonly FOLDER_RE='^(~/|/)[A-Za-z0-9 ._/-]+$'
+readonly OWNER_RE='^[A-Za-z0-9][A-Za-z0-9-]{0,38}$' # GitHub user or organization
+readonly MAX_RULES=10
+
+# Filled by load_config.
+CONFIG=""
+P_NAMES=()
+P_GIT_NAMES=()
+P_GIT_EMAILS=()
+P_FOLDERS=() # one string per profile, items separated by newlines
+P_OWNERS=()
+
+# Filled by the setup wizard.
+W_NAMES=()
+W_GIT_NAMES=()
+W_GIT_EMAILS=()
+W_FOLDERS=()
+W_OWNERS=()
+
+# ---------------------------------------------------------------- messages
+
+say() { printf '%s\n' "$*"; }
+
+# Stop with a simple message and the next step to fix it. When started from
+# a launcher (no terminal to read), also show the message in a dialog.
+die() {
+  local problem="$1" next="${2:-}"
+  printf 'Error: %s\n' "$problem" >&2
+  if [ -n "$next" ]; then printf 'Next step: %s\n' "$next" >&2; fi
+  if [ "${GHDP_GUI:-}" = "1" ]; then show_dialog "$problem" "$next"; fi
+  exit 1
+}
+
+# The text is passed as arguments, never pasted into the AppleScript code,
+# so a message can never change what the dialog code does.
+show_dialog() {
+  /usr/bin/osascript - "$1" "$2" >/dev/null 2>&1 <<'APPLESCRIPT' || true
+on run argv
+  display alert "GitHub Desktop Profiles" message ((item 1 of argv) & return & return & (item 2 of argv)) as critical
+end run
+APPLESCRIPT
+}
+
+# -------------------------------------------------------------- validation
+
+# Profile name: 1-32 letters, numbers, - or _, starting with a letter or
+# number (a leading "-" could be read as a command option). Windows device
+# names are refused so the same profiles.json works on both systems.
+valid_name() {
+  local LC_ALL=C n="$1" upper
+  [[ $n =~ $NAME_RE ]] || return 1
+  upper="$(printf '%s' "$n" | /usr/bin/tr '[:lower:]' '[:upper:]')"
+  case "$upper" in
+    CON | PRN | AUX | NUL | COM[1-9] | LPT[1-9]) return 1 ;;
+  esac
+  return 0
+}
+
+valid_email() {
+  local LC_ALL=C e="$1"
+  [ "${#e}" -le 254 ] && [[ $e =~ $EMAIL_RE ]]
+}
+
+# Git author name: 1-100 bytes. No control characters, quotes or
+# backslashes. No space or "-" at the start, no space at the end.
+valid_git_name() {
+  local LC_ALL=C v="$1"
+  if [ -z "$v" ] || [ "${#v}" -gt 100 ]; then return 1; fi
+  case "$v" in
+    *[[:cntrl:]]* | *\"* | *\\* | ' '* | *' ' | -*) return 1 ;;
+  esac
+  [ "$v" != "CHANGE ME" ]
+}
+
+# Names that differ only in capital letters or "-" vs "_" count as the
+# same, because Mac and Windows folders ignore case.
+norm_name() { printf '%s' "$1" | /usr/bin/tr '[:upper:]_' '[:lower:]-'; }
+lower() { printf '%s' "$1" | /usr/bin/tr '[:upper:]' '[:lower:]'; }
+
+# A folder rule: "~/..." or an absolute path, plain characters only, no
+# "..", "." or "//" parts, no trailing "/".
+valid_folder() {
+  local LC_ALL=C v="$1"
+  if [ "${#v}" -gt 200 ] || [ "$v" = "/" ]; then return 1; fi
+  [[ $v =~ $FOLDER_RE ]] || return 1
+  case "$v/" in
+    */../* | */./* | *//*) return 1 ;;
+  esac
+  return 0
+}
+
+valid_owner() {
+  local LC_ALL=C v="$1"
+  [[ $v =~ $OWNER_RE ]]
+}
+
+expand_folder() {
+  # shellcheck disable=SC2088 # a literal "~/" from the config, expanded here
+  case "$1" in
+    "~/"*) printf '%s/%s' "$HOME" "${1#\~/}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+require_valid_name() {
+  valid_name "$1" || die "Profile name \"$1\" is not allowed." \
+    "Use 1-32 letters, numbers, - or _, starting with a letter or number."
+}
+
+# ------------------------------------------------------------------- paths
+# Every path is built only from $HOME and a validated profile name.
+#
+# Important bash rule used in this file: inside $(...), bash 3.2 ignores
+# "set -e". So a function that may stop the tool validates first (not inside
+# a nested $(...)), and every x="$(...)" that may stop the tool is followed
+# by "|| exit 1".
+
+check_home() {
+  local LC_ALL=C
+  [[ ${HOME:-} =~ $SAFE_PATH_RE ]] || die \
+    "Your home folder path has unusual characters, so this tool stopped to stay safe." \
+    "Please open an issue on the project page."
+  case "$HOME/" in
+    */../* | */./*) die "Your home folder path is not a plain path." "Please open an issue on the project page." ;;
+  esac
+  [ -d "$HOME" ] || die "Your home folder was not found." "Please open an issue on the project page."
+}
+
+base_dir() { printf '%s/Library/Application Support/gh-desktop-profiles' "$HOME"; }
+config_path() { printf '%s/profiles.json' "$(base_dir)"; }
+bin_path() { printf '%s/bin/ghdp' "$(base_dir)"; }
+profile_dir() {
+  require_valid_name "$1"
+  printf '%s/profiles/%s' "$(base_dir)" "$1"
+}
+data_dir() {
+  require_valid_name "$1"
+  printf '%s/profiles/%s/desktop-data' "$(base_dir)" "$1"
+}
+gitconfig_path() {
+  require_valid_name "$1"
+  printf '%s/profiles/%s/gitconfig' "$(base_dir)" "$1"
+}
+launcher_path() {
+  require_valid_name "$1"
+  printf '%s/Applications/GitHub Desktop - %s.app' "$HOME" "$1"
+}
+
+script_path() {
+  local d
+  d="$(cd "$(/usr/bin/dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  printf '%s/%s' "$d" "$(/usr/bin/basename "${BASH_SOURCE[0]}")"
+}
+
+# ------------------------------------------------------------- permissions
+
+my_uid() { /usr/bin/id -u; }
+
+# True if group or others can write to the path.
+writable_by_others() {
+  local sp
+  sp="$(/usr/bin/stat -f %Sp "$1")"
+  [ "${sp:5:1}" = "w" ] || [ "${sp:8:1}" = "w" ]
+}
+
+# Make sure a folder is real (not a link), owned by you and private (700)
+# with no extra access rules (ACLs). Creates it if missing, fixes the mode.
+ensure_private_dir() {
+  local d="$1"
+  if [ -L "$d" ]; then die "\"$d\" is a link, not a real folder." "Remove the link, then try again."; fi
+  if [ ! -e "$d" ]; then
+    /bin/mkdir -m 700 "$d" || die "Could not create \"$d\"." "Check that the folder above it exists and belongs to you."
+  fi
+  [ -d "$d" ] || die "\"$d\" is not a folder." "Move it somewhere else, then try again."
+  [ "$(/usr/bin/stat -f %u "$d")" = "$(my_uid)" ] || die "\"$d\" is not owned by you." "Move it somewhere else, then try again."
+  if [ "$(/usr/bin/stat -f %Sp "$d")" != "drwx------" ]; then
+    /bin/chmod -N "$d" 2>/dev/null || true # remove extra access rules
+    /bin/chmod 700 "$d"
+  fi
+}
+
+# Same idea for a file: real file, owned by you, exact mode, no ACLs.
+ensure_private_file() {
+  local f="$1" mode="$2"
+  if [ -L "$f" ]; then die "\"$f\" is a link, not a real file." "Remove the link, then try again."; fi
+  [ -f "$f" ] || die "\"$f\" is missing or is not a file." "Run: ghdp install"
+  [ "$(/usr/bin/stat -f %u "$f")" = "$(my_uid)" ] || die "\"$f\" is not owned by you." "Move it somewhere else, then try again."
+  if [ "$(/usr/bin/stat -f %Lp "$f")" != "$mode" ] || [ "$(/usr/bin/stat -f %Sp "$f" | /usr/bin/tr -d -c '+')" = "+" ]; then
+    /bin/chmod -N "$f" 2>/dev/null || true
+    /bin/chmod "$mode" "$f"
+  fi
+}
+
+# Refuse to run if this script itself could have been changed by someone
+# else (not yours, or writable by group or others).
+check_self() {
+  local me
+  me="$(script_path)"
+  [ "$(/usr/bin/stat -f %u "$me")" = "$(my_uid)" ] || die \
+    "This tool's file is not owned by you, so it stopped to stay safe." "Reinstall: run ghdp install from the project folder."
+  if writable_by_others "$me"; then
+    die "This tool's file can be changed by other users, so it stopped to stay safe." "Run: chmod 700 \"$me\""
+  fi
+}
+
+# ------------------------------------------------------------------ config
+# profiles.json is read with plutil, which is built into macOS.
+
+plist_type() { /usr/bin/plutil -type "$1" "$CONFIG" 2>/dev/null || true; }
+plist_raw() { /usr/bin/plutil -extract "$1" raw -o - "$CONFIG"; }
+
+# Print the key names of one object ("" means the top level, without the
+# profiles list).
+plist_keys() {
+  if [ -z "$1" ]; then
+    /usr/bin/plutil -remove profiles -o - "$CONFIG" 2>/dev/null |
+      /usr/bin/plutil -convert xml1 -o - - 2>/dev/null
+  else
+    /usr/bin/plutil -extract "$1" xml1 -o - "$CONFIG" 2>/dev/null
+  fi | /usr/bin/sed -n 's:.*<key>\(.*\)</key>.*:\1:p'
+}
+
+# Fail on unknown keys. This catches typos such as "gitEmial".
+check_keys() {
+  local keypath="$1" allowed="$2" where="$3" k
+  while IFS= read -r k; do
+    case " $allowed " in
+      *" $k "*) ;;
+      *) die "Unknown setting \"$k\" in $where of profiles.json." "Allowed settings: $allowed. Check the spelling." ;;
+    esac
+  done < <(plist_keys "$keypath")
+}
+
+# plutil escapes only &, < and > in its XML output. Sets XML_TEXT.
+xml_text() {
+  XML_TEXT="${1//&lt;/<}"
+  XML_TEXT="${XML_TEXT//&gt;/>}"
+  XML_TEXT="${XML_TEXT//&amp;/&}"
+}
+
+# Read and check one profile with a single plutil call, so loading stays
+# fast with many profiles. Only the exact shapes plutil writes are accepted
+# (a dict of text values, plus "folders"/"owners" lists of text); anything
+# else (numbers, true/false, nested objects, line breaks) is refused.
+# Sets R_NAME, R_GNAME, R_GEMAIL, R_FOLDERS and R_OWNERS (lists: one item
+# per line).
+read_profile() {
+  local where="$2" xml line key="" list="" depth=0 seen=" " n=0 v nl=$'\n'
+  R_NAME=""
+  R_GNAME=""
+  R_GEMAIL=""
+  R_FOLDERS=""
+  R_OWNERS=""
+  xml="$(/usr/bin/plutil -extract "profiles.$1" xml1 -o - "$CONFIG" 2>/dev/null)" ||
+    die "In profiles.json, $where could not be read." "Compare your file with profiles.example.json."
+  while IFS= read -r line; do
+    line="${line#"${line%%[![:space:]]*}"}" # plutil indents with tabs
+    case "$line" in
+      '' | '<?xml'* | '<!DOCTYPE'* | '<plist'* | '</plist>') continue ;;
+    esac
+    if [ "$depth" -eq 0 ]; then
+      [ "$line" = "<dict>" ] || die "In profiles.json, $where is not an object { }." \
+        "Compare your file with profiles.example.json."
+      depth=1
+      continue
+    fi
+    [ "$depth" -eq 1 ] || die "In profiles.json, $where is not valid." "Compare your file with profiles.example.json."
+    case "$line" in
+      '</dict>') depth=2 ;;
+      '<key>'*'</key>')
+        v="${line#<key>}"
+        xml_text "${v%</key>}"
+        key="$XML_TEXT"
+        case "$key" in
+          name | gitName | gitEmail | folders | owners) ;;
+          *) die "Unknown setting \"$key\" in $where of profiles.json." \
+            "Allowed settings: name gitName gitEmail folders owners. Check the spelling." ;;
+        esac
+        ;;
+      '<string>'*'</string>')
+        v="${line#<string>}"
+        xml_text "${v%</string>}"
+        v="$XML_TEXT"
+        if [ -n "$list" ]; then
+          n=$((n + 1))
+          [ "$n" -le "$MAX_RULES" ] || die "In profiles.json, $where has more than $MAX_RULES $list." "Keep at most $MAX_RULES."
+          if [ "$list" = "folders" ]; then
+            # shellcheck disable=SC2088 # "~/work" is example text, not a path to expand
+            valid_folder "$v" || die "In profiles.json, $where has a \"folders\" item that is not allowed: \"$v\"." "Example: \"~/work\""
+            R_FOLDERS="$R_FOLDERS$v$nl"
+          else
+            valid_owner "$v" || die "In profiles.json, $where has an \"owners\" item that is not allowed: \"$v\"." \
+              "Example: \"your-github-username\""
+            R_OWNERS="$R_OWNERS$v$nl"
+          fi
+        else
+          case "$key" in
+            name) R_NAME="$v" ;;
+            gitName) R_GNAME="$v" ;;
+            gitEmail) R_GEMAIL="$v" ;;
+            *) die "In profiles.json, $where needs \"$key\" as a list in [ ]." "Example: \"$key\": [\"...\"]" ;;
+          esac
+          seen="$seen$key "
+        fi
+        ;;
+      '<array>' | '<array/>')
+        case "$key" in
+          folders | owners) if [ "$line" = "<array>" ]; then list="$key" n=0; fi ;;
+          *) die "In profiles.json, $where needs \"$key\" as text in quotes." "Compare your file with profiles.example.json." ;;
+        esac
+        ;;
+      '</array>') list="" ;;
+      '<string>'*) die "In profiles.json, $where has a line break in \"${list:-$key}\"." "Remove the line break." ;;
+      *)
+        if [ -n "$list" ]; then
+          die "In profiles.json, every item in \"$list\" of $where must be text in quotes." "Example: \"$list\": [\"...\"]"
+        elif [ "$key" = "folders" ] || [ "$key" = "owners" ]; then
+          die "In profiles.json, $where needs \"$key\" as a list in [ ]." "Example: \"$key\": [\"...\"]"
+        fi
+        die "In profiles.json, $where needs \"$key\" as text in quotes." "Compare your file with profiles.example.json."
+        ;;
+    esac
+  done <<<"$xml"
+  for key in name gitName gitEmail; do
+    case "$seen" in
+      *" $key "*) ;;
+      *) die "In profiles.json, $where needs \"$key\" as text in quotes." "Compare your file with profiles.example.json." ;;
+    esac
+  done
+  R_FOLDERS="${R_FOLDERS%"$nl"}"
+  R_OWNERS="${R_OWNERS%"$nl"}"
+}
+
+load_config() {
+  local count i where name gname gemail folders owners j norm nl=$'\n'
+  local norms="$nl"
+  CONFIG="$(config_path)"
+  P_NAMES=()
+  P_GIT_NAMES=()
+  P_GIT_EMAILS=()
+  P_FOLDERS=()
+  P_OWNERS=()
+  if [ ! -e "$CONFIG" ] && [ ! -L "$CONFIG" ]; then
+    die "No profiles.json found at \"$CONFIG\"." "Run: ghdp init"
+  fi
+  ensure_private_file "$CONFIG" 600
+  # (plutil -lint only knows plist formats; converting is what checks JSON.)
+  /usr/bin/plutil -convert xml1 -o /dev/null "$CONFIG" >/dev/null 2>&1 || die "profiles.json is not valid JSON." \
+    "Open it in a text editor and fix it. Often it is a missing comma or quote."
+  if [ "$(plist_type version)" != "integer" ] || [ "$(plist_raw version)" != "1" ]; then
+    die "profiles.json must contain \"version\": 1." "Compare your file with profiles.example.json."
+  fi
+  [ "$(plist_type profiles)" = "array" ] || die "profiles.json must contain a \"profiles\" list." \
+    "Compare your file with profiles.example.json."
+  check_keys "" "version" "the top level"
+  count="$(plist_raw profiles)"
+  if [ "$count" -lt 1 ] || [ "$count" -gt "$MAX_PROFILES" ]; then
+    die "profiles.json must have between 1 and $MAX_PROFILES profiles." "Add or remove profiles."
+  fi
+
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    where="profile $((i + 1))"
+    read_profile "$i" "$where"
+    name="$R_NAME"
+    require_valid_name "$name"
+    gname="$R_GNAME"
+    valid_git_name "$gname" || die "The gitName of profile \"$name\" is not allowed: \"$gname\"." \
+      "Use your name without quotes or backslashes, and replace CHANGE ME."
+    gemail="$R_GEMAIL"
+    valid_email "$gemail" || die "The gitEmail of profile \"$name\" is not a valid email: \"$gemail\"." \
+      "Use the email for this account, for example its GitHub noreply email."
+    folders="$R_FOLDERS"
+    owners="$R_OWNERS"
+
+    # Duplicate check: each name is normalised once and kept in a newline
+    # list, so this stays fast with many profiles. (Names are validated, so
+    # they never contain a newline.)
+    norm="$(norm_name "$name")"
+    case "$norms" in
+      *"$nl$norm$nl"*)
+        j=0
+        while [ "$j" -lt "${#P_NAMES[@]}" ]; do
+          if [ "$(norm_name "${P_NAMES[$j]}")" = "$norm" ]; then break; fi
+          j=$((j + 1))
+        done
+        die "Two profiles have the same name: \"${P_NAMES[$j]}\" and \"$name\"." \
+          "Give each profile a different name. Capital letters and - versus _ do not count as different."
+        ;;
+    esac
+    norms="$norms$norm$nl"
+
+    P_NAMES+=("$name")
+    P_GIT_NAMES+=("$gname")
+    P_GIT_EMAILS+=("$gemail")
+    P_FOLDERS+=("$folders")
+    P_OWNERS+=("$owners")
+    i=$((i + 1))
+  done
+}
+
+# Print the index of a profile by exact name; fail if it is not there.
+find_profile() {
+  local i=0
+  while [ "$i" -lt "${#P_NAMES[@]}" ]; do
+    if [ "${P_NAMES[$i]}" = "$1" ]; then
+      printf '%s' "$i"
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
+
+# ----------------------------------------------------------- safety checks
+
+# GitHub Desktop leaves these Electron switches on. If either variable is
+# set, another program could run code inside GitHub Desktop and read its
+# tokens. We refuse to open it rather than take that risk.
+check_electron_doors() {
+  local v
+  for v in NODE_OPTIONS ELECTRON_RUN_AS_NODE; do
+    if /usr/bin/printenv "$v" >/dev/null || [ -n "$(/bin/launchctl getenv "$v" 2>/dev/null || true)" ]; then
+      die "The setting $v is turned on. It lets other programs run code inside GitHub Desktop, so this tool will not open it." \
+        "Remove $v from your shell files (like ~/.zshrc), then run: launchctl unsetenv $v"
+    fi
+  done
+}
+
+find_app() {
+  local a
+  for a in "/Applications/GitHub Desktop.app" "$HOME/Applications/GitHub Desktop.app"; do
+    if [ -d "$a" ] && [ ! -L "$a" ]; then
+      printf '%s' "$a"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Pass only if the app is signed by GitHub (Team ID) with GitHub Desktop's
+# bundle id, and no file inside it was changed.
+app_signature_ok() {
+  /usr/bin/codesign --verify --deep --strict \
+    -R="anchor apple generic and identifier \"$GHD_BUNDLE_ID\" and certificate leaf[subject.OU] = \"$GHD_TEAM_ID\"" \
+    "$1" 2>/dev/null
+}
+
+# Print the path of a verified GitHub Desktop, or stop.
+verified_app() {
+  local app
+  app="$(find_app)" || die "GitHub Desktop is not installed in Applications." \
+    "Install it from https://desktop.github.com, then try again."
+  app_signature_ok "$app" || die "GitHub Desktop at \"$app\" failed the signature check, so it was not opened. It may be damaged or not the real app." \
+    "Reinstall GitHub Desktop from https://desktop.github.com, then try again."
+  printf '%s' "$app"
+}
+
+# --------------------------------------------------------- profile set-up
+
+# The per-profile Git settings file. GitHub Desktop reads it instead of
+# ~/.gitconfig (via GIT_CONFIG_GLOBAL). It first loads your normal Git
+# settings, then this profile's name and email are added below.
+write_gitconfig_header() {
+  printf '%s\n' \
+    "# Git settings for the \"$1\" profile (made by gh-desktop-profiles)." \
+    "# GitHub Desktop uses this file instead of ~/.gitconfig for this profile." \
+    "# It loads your normal Git settings first. The name and email below are" \
+    "# reset from profiles.json on every launch." \
+    "[include]" \
+    "	path = ~/.config/git/config" \
+    "	path = ~/.gitconfig" >"$2"
+}
+
+# Create the profile's private folders and Git settings file, and keep the
+# name and email in that file in step with profiles.json. Uses the Git that
+# ships inside the verified GitHub Desktop app (no extra dependency).
+prepare_profile() {
+  local i="$1" app="$2" name gc pd dd git
+  name="${P_NAMES[$i]}"
+  gc="$(gitconfig_path "$name")" || exit 1
+  pd="$(profile_dir "$name")" || exit 1
+  dd="$(data_dir "$name")" || exit 1
+  ensure_private_dir "$(base_dir)"
+  ensure_private_dir "$(base_dir)/profiles"
+  ensure_private_dir "$pd"
+  ensure_private_dir "$dd"
+  if [ ! -e "$gc" ] && [ ! -L "$gc" ]; then
+    (
+      umask 077
+      write_gitconfig_header "$name" "$gc"
+    )
+  fi
+  ensure_private_file "$gc" 600
+  git="$app/Contents/Resources/app/git/bin/git"
+  if ! "$git" config --file "$gc" --replace-all user.name "${P_GIT_NAMES[$i]}" ||
+    ! "$git" config --file "$gc" --replace-all user.email "${P_GIT_EMAILS[$i]}"; then
+    die "Could not update the Git settings of profile \"$name\"." \
+      "Close its GitHub Desktop window, check \"$gc\" (or delete it to start fresh), then try again."
+  fi
+  write_guard "$i" "$pd"
+}
+
+# ------------------------------------------------------ wrong-account guard
+# Each profile gets a hooks folder. The launcher points Git at it with
+# GIT_CONFIG_COUNT (core.hooksPath), which beats repo settings, so the guard
+# also runs in repos that set their own hooks folder (for example husky).
+# Every hook then runs the repo's own hook, so repo hooks keep working.
+
+readonly GUARD_HOOKS="applypatch-msg pre-applypatch post-applypatch pre-commit pre-merge-commit prepare-commit-msg commit-msg post-commit pre-rebase post-checkout post-merge pre-push post-rewrite pre-auto-gc sendemail-validate"
+
+# The hook script (plain POSIX sh, so Git can run it anywhere).
+hook_script() {
+  /bin/cat <<'HOOK'
+#!/bin/sh
+# Made by gh-desktop-profiles. Rewritten on every launch; do not edit.
+#
+# pre-commit and pre-push: stop commits and pushes that look like the wrong
+# account (wrong email, a repo outside this profile's folders, or a GitHub
+# owner this profile does not use). Every hook: then run the repo's own hook.
+# Repo values (paths, remote URLs) are only compared as text, never run.
+
+hook=$(basename "$0")
+here=$(cd "$(dirname "$0")" && pwd -P)
+profile_home=$(cd "$here/.." && pwd -P)
+rules="$profile_home/guard.rules"
+
+rule() { if [ -f "$rules" ]; then grep "^$1=" "$rules" | cut -d= -f2-; fi; }
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+real_dir() { if [ -d "$1" ]; then (cd "$1" && pwd -P); else printf '%s' "$1"; fi; }
+
+# Print why we stopped and fail the hook. Control characters (which could
+# come from a folder name or URL) are removed so they cannot mess up the
+# screen.
+stop() {
+  {
+    printf '\ngh-desktop-profiles stopped this in the "%s" profile:\n' "$(rule profile)"
+    for line in "$@"; do printf '  %s\n' "$line"; done
+    printf '\n'
+  } | tr -d '\001-\010\013-\037\177' >&2
+  exit 1
+}
+
+# Is path $1 inside folder $2? Compared without capital letters, because
+# Mac and Windows folder names ignore them. (Plain sh has no local
+# variables, so names here are unique to this function.)
+inside() {
+  inside_path=$(lower "$1")
+  inside_dir=$(lower "$2")
+  case "$inside_path/" in "$inside_dir"/*) return 0 ;; esac
+  return 1
+}
+
+# The GitHub owner in a remote URL: https://host/owner/repo,
+# ssh://user@host/owner/repo, user@host:owner/repo, or an SSH host alias
+# like work-github:owner/repo. Local paths have no owner.
+owner_of() {
+  u=$1
+  case $u in
+    *://*) u=${u#*://} ;;
+    *)
+      host=${u%%:*}
+      case $host in
+        "$u" | '' | */*) return 0 ;; # no ":" before a "/": a local path
+      esac
+      u=${u#*:}
+      lower "${u%%/*}"
+      return 0
+      ;;
+  esac
+  host=${u%%/*}
+  [ -n "$host" ] || return 0
+  case $host in *@*) u=${u#*@} ;; esac
+  u=${u#*/}
+  lower "${u%%/*}"
+}
+
+# A remote URL without any "user:token@" part, safe to show on screen.
+safe_url() {
+  case $1 in
+    *://*@*)
+      scheme=${1%%://*}
+      rest=${1#*://}
+      host=${rest%%/*}
+      case $host in *@*) rest=${rest#*@} ;; esac
+      printf '%s://%s' "$scheme" "$rest"
+      ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+check_identity() {
+  want=$(rule email)
+  [ -n "$want" ] || return 0
+  for who in GIT_AUTHOR_IDENT GIT_COMMITTER_IDENT; do
+    got=$(git var "$who" 2>/dev/null | sed -n 's/.*<\(.*\)>.*/\1/p')
+    if [ "$(lower "$got")" != "$(lower "$want")" ]; then
+      stop "This commit would use the email \"$got\", but this profile uses \"$want\"." \
+        "Check that you opened the right GitHub Desktop profile."
+    fi
+  done
+}
+
+other_profile_for() {
+  for r in "$profile_home"/../*/guard.rules; do
+    [ -f "$r" ] || continue
+    [ "$(cd "$(dirname "$r")" && pwd -P)" = "$profile_home" ] && continue
+    p=$(grep '^profile=' "$r" | cut -d= -f2-)
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      if inside "$1" "$(real_dir "$f")"; then
+        printf '%s' "$p"
+        return 0
+      fi
+    done <<EOF
+$(grep '^folder=' "$r" | cut -d= -f2-)
+EOF
+  done
+  return 0
+}
+
+# The repo must not be in another profile's folders, and if this profile
+# has folders, it must be inside one of them.
+check_folder() {
+  top=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+  top=$(real_dir "$top")
+  folders=$(rule folder)
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if inside "$top" "$(real_dir "$f")"; then return 0; fi
+  done <<EOF
+$folders
+EOF
+  other=$(other_profile_for "$top")
+  if [ -n "$other" ]; then
+    stop "This repo ($top) belongs to the \"$other\" profile." \
+      "Open it in \"GitHub Desktop - $other\" instead."
+  fi
+  if [ -n "$folders" ]; then
+    stop "This repo ($top) is outside the folders set for this profile." \
+      "If it belongs here, add its folder to this profile (run setup again), then try again."
+  fi
+}
+
+other_profile_for_owner() {
+  for r in "$profile_home"/../*/guard.rules; do
+    [ -f "$r" ] || continue
+    [ "$(cd "$(dirname "$r")" && pwd -P)" = "$profile_home" ] && continue
+    if grep -qxF -- "owner=$1" "$r"; then
+      grep '^profile=' "$r" | cut -d= -f2-
+      return 0
+    fi
+  done
+  return 0
+}
+
+# The remote's GitHub owner must not be another profile's owner, and if
+# this profile has owners, it must be one of them.
+check_owner() {
+  # Fail closed on anything that cannot be read safely.
+  case $1 in
+    *[[:cntrl:]]*) stop "The remote URL of this repo has unusual characters, so it could not be checked." \
+      "Fix the remote URL in this repo, then try again." ;;
+  esac
+  o=$(owner_of "$1")
+  [ -n "$o" ] || return 0
+  case $o in
+    *[!a-z0-9-]*) stop "Could not read the GitHub owner of the remote $(safe_url "$1")." \
+      "Fix the remote URL in this repo, then try again." ;;
+  esac
+  owners=$(rule owner)
+  if [ -n "$owners" ] && printf '%s\n' "$owners" | grep -qxF -- "$o"; then return 0; fi
+  other=$(other_profile_for_owner "$o")
+  if [ -n "$other" ]; then
+    stop "The remote $(safe_url "$1") belongs to \"$o\", which is set for the \"$other\" profile." \
+      "Open this repo in \"GitHub Desktop - $other\" instead."
+  fi
+  if [ -n "$owners" ]; then
+    stop "The remote $(safe_url "$1") belongs to \"$o\", which this profile does not use." \
+      "This profile is for: $(printf '%s' "$owners" | tr '\n' ' ')" \
+      "Open the right GitHub Desktop profile, or add \"$o\" to this profile's owners (run setup again)."
+  fi
+}
+
+# New commits being pushed must have been made with this profile's email.
+# Only commits that are on no remote yet count: work already on GitHub (a
+# teammate's commits, pull requests merged on github.com) is never flagged.
+# If the commits cannot be listed, the push is stopped (fail closed).
+check_pushed_commits() {
+  want=$(lower "$(rule email)")
+  [ -n "$want" ] || return 0
+  zero=$(git hash-object --stdin </dev/null | sed 's/./0/g')
+  while read -r _ lsha _ rsha; do
+    [ -n "$lsha" ] || continue
+    [ "$lsha" = "$zero" ] && continue # deleting a branch
+    if [ "$rsha" != "$zero" ] && git cat-file -e "$rsha^{commit}" 2>/dev/null; then
+      found=$(git log --format=%ce "$lsha" "^$rsha" --not --remotes 2>/dev/null) ||
+        stop "Could not list the commits being pushed." "Fetch, then try the push again."
+    else
+      found=$(git log --format=%ce "$lsha" --not --remotes 2>/dev/null) ||
+        stop "Could not list the commits being pushed." "Fetch, then try the push again."
+    fi
+    bad=$(printf '%s\n' "$found" | tr '[:upper:]' '[:lower:]' | grep -v -x -F -e "$want" -e '' | sort -u | head -n 3 | tr '\n' ' ')
+    if [ -n "$bad" ]; then
+      stop "Some new commits you are pushing were made with another email: $bad" \
+        "This profile uses \"$(rule email)\". Check that these commits belong to this account." \
+        "If they are other people's work (for example a project you copied), push once from" \
+        "Terminal in this repo with: git push --no-verify"
+    fi
+  done <<EOF
+$1
+EOF
+}
+
+input=''
+case "$hook" in
+  pre-commit | pre-merge-commit)
+    check_identity
+    check_folder
+    check_owner "$(git remote get-url origin 2>/dev/null)"
+    ;;
+  pre-push)
+    input=$(cat)
+    check_owner "$2"
+    check_folder
+    check_pushed_commits "$input"
+    ;;
+esac
+
+# Run the repo's own hook for this event: the hooks folder the repo (or your
+# normal Git settings) chose, else .git/hooks.
+hooks_path=$(env -u GIT_CONFIG_COUNT -u GIT_CONFIG_KEY_0 -u GIT_CONFIG_VALUE_0 git config --get core.hooksPath 2>/dev/null)
+if [ -n "$hooks_path" ]; then
+  # A relative path stays relative: Git runs hooks from the folder it is
+  # relative to (the work tree, or the Git folder in a bare repo).
+  # shellcheck disable=SC2088 # a literal "~/" from Git settings, expanded here
+  case $hooks_path in
+    "~/"*) hooks_path="$HOME/${hooks_path#\~/}" ;;
+  esac
+else
+  hooks_path="$(git rev-parse --git-common-dir 2>/dev/null)/hooks"
+fi
+target="$hooks_path/$hook"
+if [ ! -f "$target" ] || [ ! -x "$target" ]; then exit 0; fi
+if [ "$(real_dir "$(dirname "$target")")" = "$here" ]; then exit 0; fi # never call ourselves
+if [ "$hook" = "pre-push" ]; then
+  if [ -n "$input" ]; then printf '%s\n' "$input"; fi | "$target" "$@"
+  exit $?
+fi
+exec "$target" "$@"
+HOOK
+}
+
+# Put a finished temp file in place in one step (mv is atomic and replaces
+# a link instead of writing through it). A folder in the way is refused.
+place_file() {
+  local tmp="$1" dst="$2" mode="$3"
+  if [ -d "$dst" ] && [ ! -L "$dst" ]; then
+    /bin/rm -f "$tmp"
+    die "\"$dst\" is a folder." "Move it somewhere else, then try again."
+  fi
+  /bin/chmod "$mode" "$tmp"
+  /bin/mv -f "$tmp" "$dst"
+}
+
+new_temp() {
+  /usr/bin/mktemp "$1/.ghdp.XXXXXX" || die "Could not create a temporary file in \"$1\"." \
+    "Check the free space on your Mac, then try again."
+}
+
+# Write this profile's guard rules (from profiles.json) and hook scripts.
+# Each file is written in full first and then moved into place, so a commit
+# made while this runs never finds a missing or half-written hook.
+write_guard() {
+  local i="$1" pd="$2" f o h tmp
+  ensure_private_dir "$pd/hooks"
+  tmp="$(new_temp "$pd")" || exit 1
+  {
+    printf '%s\n' "# Made by gh-desktop-profiles from profiles.json. Rewritten on every launch."
+    printf 'profile=%s\n' "${P_NAMES[$i]}"
+    printf 'email=%s\n' "${P_GIT_EMAILS[$i]}"
+    while IFS= read -r f; do
+      if [ -n "$f" ]; then printf 'folder=%s\n' "$(expand_folder "$f")"; fi
+    done <<<"${P_FOLDERS[$i]}"
+    while IFS= read -r o; do
+      if [ -n "$o" ]; then printf 'owner=%s\n' "$(lower "$o")"; fi
+    done <<<"${P_OWNERS[$i]}"
+  } >"$tmp"
+  place_file "$tmp" "$pd/guard.rules" 600
+  for h in $GUARD_HOOKS; do
+    tmp="$(new_temp "$pd/hooks")" || exit 1
+    hook_script >"$tmp"
+    place_file "$tmp" "$pd/hooks/$h" 700
+  done
+}
+
+# Guard rules of profiles that are no longer in profiles.json are removed,
+# so the guard never points people at a profile that does not exist.
+# Folder names are compared without capital letters (Mac folders ignore
+# them). Profile data itself is never touched.
+remove_stale_guards() {
+  local d base i keep
+  for d in "$(base_dir)/profiles/"*/; do
+    if [ ! -f "${d}guard.rules" ]; then continue; fi
+    base="$(/usr/bin/basename "$d")"
+    keep=0
+    i=0
+    while [ "$i" -lt "${#P_NAMES[@]}" ]; do
+      if [ "$(lower "${P_NAMES[$i]}")" = "$(lower "$base")" ]; then keep=1; fi
+      i=$((i + 1))
+    done
+    if [ "$keep" = "0" ]; then /bin/rm -f "${d:?}guard.rules"; fi
+  done
+}
+
+# Copy this script to a fixed private place. Launchers run that copy, so a
+# later change in the project folder never runs until you install again.
+install_self() {
+  local src dst tmp
+  src="$(script_path)"
+  dst="$(bin_path)"
+  ensure_private_dir "$(base_dir)/bin"
+  if [ "$src" = "$dst" ]; then return 0; fi
+  if [ -d "$dst" ] && [ ! -L "$dst" ]; then die "\"$dst\" is a folder." "Move it somewhere else, then try again."; fi
+  tmp="$(/usr/bin/mktemp "$(base_dir)/bin/.ghdp.XXXXXX")" || die "Could not create a temporary file." "Check the free space on your Mac, then try again."
+  /bin/cp "$src" "$tmp"
+  /bin/chmod 700 "$tmp"
+  /bin/mv -f "$tmp" "$dst"
+}
+
+write_info_plist() {
+  /bin/cat >"$1" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDisplayName</key><string>GitHub Desktop - $2</string>
+  <key>CFBundleExecutable</key><string>launch</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIdentifier</key><string>$3</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>GitHub Desktop - $2</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>$GHDP_VERSION</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>LSUIElement</key><true/>
+</dict>
+</plist>
+PLIST
+}
+
+# The launcher's only job: run the installed copy of this tool with a fixed
+# profile name. Name and paths were validated, so they are safe to write.
+write_launch_script() {
+  /bin/cat >"$1" <<SCRIPT
+#!/bin/bash
+# Made by gh-desktop-profiles. Opens GitHub Desktop with the "$2" profile.
+# To change it, edit profiles.json and run: ghdp install
+export GHDP_GUI=1
+exec /bin/bash "$3" launch "$2"
+SCRIPT
+}
+
+# Create (or refresh) "~/Applications/GitHub Desktop - <name>.app".
+# One badge color per profile position, so each launcher looks different.
+badge_color() {
+  case $(($1 % 8)) in
+    0) printf '37,99,235' ;;  # blue
+    1) printf '22,163,74' ;;  # green
+    2) printf '234,88,12' ;;  # orange
+    3) printf '219,39,119' ;; # pink
+    4) printf '13,148,136' ;; # teal
+    5) printf '202,138,4' ;;  # amber
+    6) printf '220,38,38' ;;  # red
+    *) printf '79,70,229' ;;  # indigo
+  esac
+}
+
+# Draw the GitHub Desktop icon with a colored circle and the profile's first
+# letter. Uses only tools built into macOS (JavaScript for Automation and
+# sips). The values are passed as arguments, never pasted into the script.
+make_badge_icon() {
+  local src="$1" icns="$2" letter="$3" rgb="$4" png
+  png="${icns%.icns}.png"
+  /usr/bin/osascript -l JavaScript - "$src" "$png" "$letter" "$rgb" >/dev/null 2>&1 <<'JXA' || return 1
+ObjC.import('AppKit');
+function run(argv) {
+  var rgb = argv[3].split(',').map(Number);
+  var size = 512;
+  var base = $.NSImage.alloc.initWithContentsOfFile(argv[0]);
+  if (base.isNil()) { throw new Error('cannot read icon'); }
+  var rep = $.NSBitmapImageRep.alloc.initWithBitmapDataPlanesPixelsWidePixelsHighBitsPerSampleSamplesPerPixelHasAlphaIsPlanarColorSpaceNameBytesPerRowBitsPerPixel(
+    null, size, size, 8, 4, true, false, $.NSCalibratedRGBColorSpace, 0, 0);
+  $.NSGraphicsContext.saveGraphicsState;
+  $.NSGraphicsContext.setCurrentContext($.NSGraphicsContext.graphicsContextWithBitmapImageRep(rep));
+  base.drawInRectFromRectOperationFraction($.NSMakeRect(0, 0, size, size), $.NSZeroRect, $.NSCompositingOperationSourceOver, 1.0);
+  var d = size * 0.46, x = size - d - size * 0.03, y = size * 0.03;
+  var circle = $.NSBezierPath.bezierPathWithOvalInRect($.NSMakeRect(x, y, d, d));
+  $.NSColor.colorWithSRGBRedGreenBlueAlpha(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 1).setFill;
+  circle.fill;
+  $.NSColor.whiteColor.setStroke;
+  circle.setLineWidth(size * 0.025);
+  circle.stroke;
+  var attrs = $.NSMutableDictionary.dictionary;
+  attrs.setObjectForKey($.NSFont.boldSystemFontOfSize(d * 0.6), $('NSFont'));
+  attrs.setObjectForKey($.NSColor.whiteColor, $('NSColor'));
+  var text = $.NSString.alloc.initWithString(argv[2]);
+  var ts = text.sizeWithAttributes(attrs);
+  text.drawAtPointWithAttributes($.NSMakePoint(x + (d - ts.width) / 2, y + (d - ts.height) / 2), attrs);
+  $.NSGraphicsContext.restoreGraphicsState;
+  var png = rep.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $.NSDictionary.dictionary);
+  if (!png.writeToFileAtomically(argv[1], true)) { throw new Error('cannot write icon'); }
+}
+JXA
+  /usr/bin/sips -s format icns "$png" --out "$icns" >/dev/null 2>&1 || {
+    /bin/rm -f "$png"
+    return 1
+  }
+  /bin/rm -f "$png"
+}
+
+# Print the launchers this tool made (for any profile), one path per line.
+# A launcher is recognised by its bundle id, not by its folder name.
+our_launchers() {
+  local app id
+  for app in "$HOME/Applications/"*.app; do
+    if [ ! -d "$app" ] || [ -L "$app" ]; then continue; fi
+    id="$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$app/Contents/Info.plist" 2>/dev/null || true)"
+    case "$id" in "$TOOL_ID".*) printf '%s\n' "$app" ;; esac
+  done
+}
+
+# Remove launchers this tool made for profiles that are no longer in
+# profiles.json. Compared by bundle id, because Mac folder names ignore
+# capital letters ("Office.app" and "office.app" are the same folder).
+remove_stale_launchers() {
+  local app id i keep current
+  while IFS= read -r app; do
+    id="$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$app/Contents/Info.plist" 2>/dev/null || true)"
+    keep=0
+    i=0
+    while [ "$i" -lt "${#P_NAMES[@]}" ]; do
+      # Keep it only if it is this profile's launcher by bundle id AND by
+      # path (ignoring capital letters), so a renamed profile such as
+      # my_work -> my-work does not leave its old launcher behind.
+      current="$(launcher_path "${P_NAMES[$i]}")" || exit 1
+      if [ "$id" = "$TOOL_ID.$(norm_name "${P_NAMES[$i]}")" ] && [ "$(lower "$app")" = "$(lower "$current")" ]; then
+        keep=1
+      fi
+      i=$((i + 1))
+    done
+    if [ "$keep" = "0" ]; then
+      /bin/rm -rf "${app:?}"
+      say "Removed the launcher of an old profile: $app"
+    fi
+  done < <(our_launchers)
+}
+
+make_launcher() {
+  local name="$1" app="$2" index="${3:-0}" apps launcher id icon letter
+  apps="$HOME/Applications"
+  if [ -L "$apps" ]; then die "\"$apps\" is a link, not a real folder." "Remove the link, then try again."; fi
+  if [ ! -d "$apps" ]; then /bin/mkdir -m 755 "$apps"; fi
+  [ "$(/usr/bin/stat -f %u "$apps")" = "$(my_uid)" ] || die "\"$apps\" is not owned by you." "Please open an issue on the project page."
+  if writable_by_others "$apps"; then
+    die "\"$apps\" can be changed by other users, so a launcher there would not be safe." "Run: chmod go-w \"$apps\""
+  fi
+
+  launcher="$(launcher_path "$name")" || exit 1
+  id="$TOOL_ID.$(norm_name "$name")"
+  if [ -e "$launcher" ] || [ -L "$launcher" ]; then
+    if [ -L "$launcher" ] ||
+      [ "$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$launcher/Contents/Info.plist" 2>/dev/null || true)" != "$id" ]; then
+      die "\"$launcher\" already exists and was not made by this tool." "Rename or remove it, then run: ghdp install"
+    fi
+  fi
+
+  # Never write through a planted link: every folder must be real (checked
+  # before anything is created), and old files are removed before new ones
+  # are written.
+  local part
+  for part in Contents Contents/MacOS Contents/Resources; do
+    if [ -L "$launcher/$part" ]; then die "\"$launcher/$part\" is a link." "Remove that launcher, then run: ghdp install"; fi
+  done
+  (
+    umask 077
+    /bin/mkdir -p "$launcher/Contents/MacOS" "$launcher/Contents/Resources"
+  )
+  /bin/rm -f "${launcher:?}/Contents/Info.plist" "${launcher:?}/Contents/MacOS/launch" \
+    "${launcher:?}/Contents/Resources/AppIcon.icns" "${launcher:?}/Contents/Resources/AppIcon.png"
+  (
+    umask 077
+    write_info_plist "$launcher/Contents/Info.plist" "$name" "$id"
+    write_launch_script "$launcher/Contents/MacOS/launch" "$name" "$(bin_path)"
+  )
+  icon="$app/Contents/Resources/electron.icns"
+  letter="$(printf '%s' "${name:0:1}" | /usr/bin/tr '[:lower:]' '[:upper:]')"
+  if [ -f "$icon" ] && ! make_badge_icon "$icon" "$launcher/Contents/Resources/AppIcon.icns" "$letter" "$(badge_color "$index")"; then
+    /bin/cp "$icon" "$launcher/Contents/Resources/AppIcon.icns" # plain icon if drawing fails
+  fi
+  /bin/chmod -R go-rwx "$launcher"
+  /bin/chmod 700 "$launcher/Contents/MacOS/launch"
+  /usr/bin/touch "$launcher"
+}
+
+# ------------------------------------------------- setup wizard and import
+
+# Your normal GitHub Desktop data. This tool only ever reads it.
+normal_data_dir() { printf '%s/Library/Application Support/GitHub Desktop' "$HOME"; }
+
+# True if a running program has GitHub Desktop's database open in this
+# folder. GitHub Desktop holds these LOCK files for as long as it runs.
+desktop_holds_data() {
+  local dir="$1" lock
+  for lock in "$dir/Local Storage/leveldb/LOCK" "$dir"/IndexedDB/*/LOCK; do
+    if [ -e "$lock" ] && [ -n "$(/usr/sbin/lsof -t -- "$lock" 2>/dev/null || true)" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Copy your normal GitHub Desktop data (login, repo list, settings) into a
+# NEW profile folder. Caches, logs and lock files are left out, and links
+# that point outside the folder are skipped (--safe-links). The original is
+# only read. Tokens are not in this folder; they stay in your Keychain.
+copy_desktop_data() {
+  local src="$1" dst="$2"
+  if [ ! -d "$src" ] || [ -L "$src" ]; then
+    die "Your GitHub Desktop data folder was not found." "Run setup again and choose not to copy."
+  fi
+  [ "$(/usr/bin/stat -f %u "$src")" = "$(my_uid)" ] || die "Your GitHub Desktop data folder is not owned by you." \
+    "Run setup again and choose not to copy."
+  if [ -e "$dst" ] || [ -L "$dst" ]; then die "\"$dst\" already exists, so nothing was copied." "Choose another profile name."; fi
+  /usr/bin/rsync -a --safe-links \
+    --exclude='Cache' --exclude='Code Cache' --exclude='GPUCache' --exclude='*Dawn*Cache' \
+    --exclude='GPUPersistentCache' --exclude='ShaderCache' --exclude='Crashpad' --exclude='logs' \
+    --exclude='Singleton*' --exclude='Cookies*' "$src/" "$dst/" ||
+    die "Copying your GitHub Desktop data failed." "Your normal GitHub Desktop was not changed. Run setup again."
+  /bin/chmod -R go-rwx "$dst"
+  ensure_private_dir "$dst"
+}
+
+# Wizard messages go to stderr, so they still show inside $(...).
+tell() { printf '%s\n' "$*" >&2; }
+
+# Ask a question. An empty answer means the default. Stops on end of input.
+ask() {
+  local question="$1" default="${2:-}" answer
+  if [ -n "$default" ]; then question="$question [$default]"; fi
+  read -r -p "$question: " answer || die "Setup was cancelled. Nothing was changed." "Run setup again when you are ready."
+  printf '%s' "${answer:-$default}"
+}
+
+ask_yes() {
+  local answer
+  while true; do
+    answer="$(ask "$1 (y/n)" "$2")" || exit 1
+    case "$answer" in
+      y | Y | yes | Yes) return 0 ;;
+      n | N | no | No) return 1 ;;
+    esac
+    tell "  Please type y or n."
+  done
+}
+
+# Ask for a profile name that is valid and not used yet. With "new", also
+# refuse names that already have profile data (an import needs a new folder).
+ask_profile_name() {
+  local n j
+  while true; do
+    n="$(ask "Name for profile $1 (letters, numbers, - or _; for example office or personal)")" || exit 1
+    if ! valid_name "$n"; then
+      tell "  That name is not allowed. Use 1-32 letters, numbers, - or _, starting with a letter or number."
+      continue
+    fi
+    j=0
+    while [ "$j" -lt "${#W_NAMES[@]}" ]; do
+      if [ "$(norm_name "${W_NAMES[$j]}")" = "$(norm_name "$n")" ]; then break; fi
+      j=$((j + 1))
+    done
+    if [ "$j" -lt "${#W_NAMES[@]}" ]; then
+      tell "  You already have a profile with that name."
+      continue
+    fi
+    if [ "${2:-}" = "new" ] && [ -e "$(data_dir "$n")" ]; then
+      tell "  A profile called \"$n\" already has data on this Mac. Choose another name."
+      continue
+    fi
+    printf '%s' "$n"
+    return 0
+  done
+}
+
+ask_git_name() {
+  local v
+  while true; do
+    v="$(ask "  Name on commits" "$1")" || exit 1
+    if valid_git_name "$v"; then
+      printf '%s' "$v"
+      return 0
+    fi
+    tell "  Please type your name (no quotes or backslashes)."
+  done
+}
+
+ask_email() {
+  local v
+  while true; do
+    v="$(ask "  Email on commits for this account" "$1")" || exit 1
+    if valid_email "$v"; then
+      printf '%s' "$v"
+      return 0
+    fi
+    tell "  That does not look like an email address."
+  done
+}
+
+# Ask for an optional, comma-separated list. Prints one valid item per
+# line (empty when skipped). $2 is the check function, $3 a hint.
+ask_list() {
+  local answer rest item out n ok
+  while true; do
+    answer="$(ask "$1")" || exit 1
+    rest="$answer,"
+    out=""
+    n=0
+    ok=1
+    while [ -n "$rest" ]; do
+      item="${rest%%,*}"
+      rest="${rest#*,}"
+      item="${item#"${item%%[![:space:]]*}"}" # trim spaces at the start
+      item="${item%"${item##*[![:space:]]}"}" # and at the end
+      item="${item%/}"
+      if [ -z "$item" ]; then continue; fi
+      if ! "$2" "$item"; then
+        tell "  \"$item\" is not allowed. $3"
+        ok=0
+        break
+      fi
+      n=$((n + 1))
+      out="$out$item"$'\n'
+    done
+    if [ "$ok" = "1" ] && [ "$n" -gt "$MAX_RULES" ]; then
+      tell "  Please give at most $MAX_RULES."
+      ok=0
+    fi
+    if [ "$ok" = "1" ]; then
+      printf '%s' "$out"
+      return 0
+    fi
+  done
+}
+
+# The guard rules for one profile. Owners are recommended: without folders
+# or owners, the guard can only check the email, so we say so and offer to
+# add owners once more.
+ask_rules() {
+  local last
+  W_FOLDERS+=("$(ask_list "  Folders used ONLY for this account's repos, comma separated (optional, e.g. ~/work)" \
+    valid_folder "Use ~/folder or a full path like /Users/you/work.")") || exit 1
+  W_OWNERS+=("$(ask_list "  GitHub owners for this account: your username and organizations, comma separated (recommended; the part after github.com/ in a repo link)" \
+    valid_owner "Use a GitHub username or organization name.")") || exit 1
+  last=$((${#W_OWNERS[@]} - 1))
+  if [ -z "${W_FOLDERS[$last]}" ] && [ -z "${W_OWNERS[$last]}" ]; then
+    say "  Without folders or owners, the guard can only check the email. It cannot"
+    say "  tell that a repo belongs to another account."
+    if ask_yes "  Add GitHub owners for this account now (recommended)?" y; then
+      W_OWNERS[last]="$(ask_list "  GitHub owners for this account, comma separated" \
+        valid_owner "Use a GitHub username or organization name.")" || exit 1
+    fi
+  fi
+}
+
+# Print a newline list as a JSON array (items were validated: no quotes,
+# backslashes or control characters).
+json_list() {
+  local item sep=""
+  printf '['
+  while IFS= read -r item; do
+    if [ -n "$item" ]; then
+      printf '%s"%s"' "$sep" "$item"
+      sep=", "
+    fi
+  done <<<"$1"
+  printf ']'
+}
+
+# Read one value from your normal Git settings, to offer it as a default.
+# Uses the Git inside the verified GitHub Desktop; never changes anything.
+global_git_value() {
+  /usr/bin/env -u GIT_CONFIG_GLOBAL "$2/Contents/Resources/app/git/bin/git" config --global --get "$1" 2>/dev/null || true
+}
+
+add_wizard_profile() {
+  W_NAMES+=("$1")
+  W_GIT_NAMES+=("$2")
+  W_GIT_EMAILS+=("$3")
+}
+
+# Write the wizard's answers as profiles.json (values were validated, so
+# they contain no quotes, backslashes or control characters). The old file
+# is kept as profiles.json.bak.
+write_profiles_json() {
+  local cfg tmp i sep=""
+  cfg="$(config_path)"
+  if [ -L "$cfg" ]; then die "\"$cfg\" is a link, not a real file." "Remove the link, then run setup again."; fi
+  tmp="$(/usr/bin/mktemp "$(base_dir)/.profiles.XXXXXX")" || die "Could not create a temporary file." "Check the free space on your Mac, then try again."
+  {
+    printf '{\n  "version": 1,\n  "profiles": [\n'
+    i=0
+    while [ "$i" -lt "${#W_NAMES[@]}" ]; do
+      printf '%s    { "name": "%s", "gitName": "%s", "gitEmail": "%s"' \
+        "$sep" "${W_NAMES[$i]}" "${W_GIT_NAMES[$i]}" "${W_GIT_EMAILS[$i]}"
+      if [ -n "${W_FOLDERS[$i]}" ]; then printf ', "folders": %s' "$(json_list "${W_FOLDERS[$i]}")"; fi
+      if [ -n "${W_OWNERS[$i]}" ]; then printf ', "owners": %s' "$(json_list "${W_OWNERS[$i]}")"; fi
+      printf ' }'
+      sep=$',\n'
+      i=$((i + 1))
+    done
+    printf '\n  ]\n}\n'
+  } >"$tmp"
+  if [ -f "$cfg" ]; then
+    /bin/rm -f "${cfg:?}.bak" # never copy through a planted link
+    /bin/cp "$cfg" "$cfg.bak"
+    /bin/chmod 600 "$cfg.bak"
+  fi
+  /bin/chmod 600 "$tmp"
+  /bin/mv -f "$tmp" "$cfg"
+}
+
+# ---------------------------------------------------------------- commands
+
+usage() {
+  /usr/bin/sed -n '2,/^$/s/^# \{0,1\}//p' "$(script_path)"
+}
+
+cmd_init() {
+  local cfg example
+  check_home
+  ensure_private_dir "$(base_dir)"
+  cfg="$(config_path)"
+  if [ -e "$cfg" ] || [ -L "$cfg" ]; then
+    say "You already have a profiles.json: $cfg"
+    say "Edit it, then run: ghdp install"
+    return 0
+  fi
+  example="$(/usr/bin/dirname "$(script_path)")/../profiles.example.json"
+  [ -f "$example" ] || die "Could not find profiles.example.json." "Run init from the project folder: mac/ghdp init"
+  /bin/cp "$example" "$cfg"
+  /bin/chmod 600 "$cfg"
+  say "Created: $cfg"
+  say "Next: replace every CHANGE ME with your details, then run: mac/ghdp install"
+  say "To open it in VS Code, run: open -a \"Visual Studio Code\" \"$cfg\""
+}
+
+# Guided setup: asks for your profiles, can copy your current GitHub Desktop
+# into the first one, writes profiles.json and installs the launchers.
+cmd_setup() {
+  local app cfg def_name def_email n gname gemail import="" last i pd dd
+  [ "$#" -eq 0 ] || die "setup does not take options." "Run: ghdp setup"
+  check_home
+  say "GitHub Desktop Profiles setup"
+  say "You will get one GitHub Desktop icon per GitHub account."
+  say "Never type a password here. You sign in later, inside GitHub Desktop."
+  say ""
+  app="$(verified_app)" || exit 1
+  say "GitHub Desktop: found, and signed by GitHub."
+  ensure_private_dir "$(base_dir)"
+  cfg="$(config_path)"
+  if [ -e "$cfg" ] || [ -L "$cfg" ]; then
+    say "You already have profiles. A new setup replaces them (your old profiles.json is kept as a backup)."
+    say "If you say no, your profiles are kept and their launchers are installed again."
+    if ! ask_yes "Start a new setup?" n; then
+      say ""
+      cmd_install
+      return 0
+    fi
+  fi
+
+  W_NAMES=()
+  W_GIT_NAMES=()
+  W_GIT_EMAILS=()
+  W_FOLDERS=()
+  W_OWNERS=()
+  def_name="$(global_git_value user.name "$app")"
+  valid_git_name "$def_name" || def_name=""
+  def_email="$(global_git_value user.email "$app")"
+  valid_email "$def_email" || def_email=""
+
+  if [ -d "$(normal_data_dir)" ] && [ ! -L "$(normal_data_dir)" ]; then
+    say ""
+    say "Your current GitHub Desktop already has a login and a repo list."
+    say "(Its WHOLE repo list is copied. If it holds repos of another account, you"
+    say "remove them from this profile afterwards; setup tells you how.)"
+    if ask_yes "Copy them into your first profile, so that account does not need to sign in again?" y; then
+      n="$(ask_profile_name 1 new)" || exit 1
+      gname="$(ask_git_name "$def_name")" || exit 1
+      gemail="$(ask_email "$def_email")" || exit 1
+      add_wizard_profile "$n" "$gname" "$gemail"
+      ask_rules
+      import="$n"
+    fi
+  fi
+
+  while [ "${#W_NAMES[@]}" -lt "$MAX_PROFILES" ]; do
+    say ""
+    if [ "${#W_NAMES[@]}" -gt 0 ]; then
+      if [ "${#W_NAMES[@]}" -eq 1 ]; then i=y; else i=n; fi
+      ask_yes "Add another profile (another GitHub account)?" "$i" || break
+      last="${W_GIT_NAMES[$((${#W_GIT_NAMES[@]} - 1))]}"
+    else
+      last="$def_name"
+    fi
+    n="$(ask_profile_name $((${#W_NAMES[@]} + 1)))" || exit 1
+    gname="$(ask_git_name "$last")" || exit 1
+    gemail="$(ask_email "")" || exit 1
+    add_wizard_profile "$n" "$gname" "$gemail"
+    ask_rules
+  done
+
+  say ""
+  say "Your profiles:"
+  i=0
+  while [ "$i" -lt "${#W_NAMES[@]}" ]; do
+    if [ "${W_NAMES[$i]}" = "$import" ]; then n="copied from your current GitHub Desktop"; else n="new: sign in once"; fi
+    say "  ${W_NAMES[$i]}: ${W_GIT_NAMES[$i]} <${W_GIT_EMAILS[$i]}> ($n)"
+    if [ -n "${W_FOLDERS[$i]}" ]; then say "      folders: $(printf "%s" "${W_FOLDERS[$i]}" | /usr/bin/tr "\n" " ")"; fi
+    if [ -n "${W_OWNERS[$i]}" ]; then say "      owners: $(printf "%s" "${W_OWNERS[$i]}" | /usr/bin/tr "\n" " ")"; fi
+    if [ -z "${W_FOLDERS[$i]}${W_OWNERS[$i]}" ]; then say "      guard: email check only (no folders or owners)"; fi
+    i=$((i + 1))
+  done
+  if ! ask_yes "Create these profiles?" y; then
+    say "Nothing changed."
+    return 0
+  fi
+
+  if [ -n "$import" ]; then
+    while desktop_holds_data "$(normal_data_dir)"; do
+      say "Please quit GitHub Desktop now (press Cmd+Q in its window)."
+      read -r -p "Then press Return to continue: " n || die "Setup was cancelled. Nothing was changed." "Run setup again when you are ready."
+    done
+    pd="$(profile_dir "$import")" || exit 1
+    dd="$(data_dir "$import")" || exit 1
+    ensure_private_dir "$(base_dir)/profiles"
+    ensure_private_dir "$pd"
+    if [ -e "$dd" ] || [ -L "$dd" ]; then die "\"$dd\" already exists, so nothing was copied." "Choose another profile name."; fi
+    # Copy into a temporary folder and move it into place only when it is
+    # complete, so a cancelled or failed copy never counts as real data.
+    /bin/rm -rf "${dd:?}.partial"
+    copy_desktop_data "$(normal_data_dir)" "$dd.partial"
+    /bin/mv "$dd.partial" "$dd"
+    say "Copied your GitHub Desktop data into \"$import\". Your normal GitHub Desktop is unchanged."
+  fi
+  # Written only now, after any copy succeeded.
+  write_profiles_json
+  say ""
+  cmd_install
+  if [ -n "$import" ]; then
+    say "\"$import\" opens already signed in, with your repos."
+    say ""
+    say "One clean-up step: \"$import\" got the WHOLE repo list of your old GitHub Desktop."
+    say "If it shows repos of another account, open \"GitHub Desktop - $import\","
+    say "right-click each of them and choose Remove (the files stay on your disk)."
+    say "Then add them in the right profile: File > Add Local Repository."
+  fi
+  say ""
+  say "Do not sign out of an account in one window: the same account in another window would be signed out too."
+}
+
+cmd_install() {
+  local app i
+  [ "$#" -eq 0 ] || die "install does not take options." "Run: ghdp install"
+  check_home
+  load_config
+  app="$(verified_app)" || exit 1
+  ensure_private_dir "$(base_dir)"
+  install_self
+  i=0
+  while [ "$i" -lt "${#P_NAMES[@]}" ]; do
+    prepare_profile "$i" "$app"
+    make_launcher "${P_NAMES[$i]}" "$app" "$i"
+    say "Ready: ${P_NAMES[$i]} -> $(launcher_path "${P_NAMES[$i]}")"
+    i=$((i + 1))
+  done
+  remove_stale_launchers
+  remove_stale_guards
+  say ""
+  say "Done. In Finder, open your home folder > Applications and double-click"
+  say "\"GitHub Desktop - ${P_NAMES[0]}\"."
+  say "Tip: sign in to each profile while it is the only GitHub Desktop window open."
+}
+
+# True if any profile's GitHub Desktop window is still open.
+profiles_in_use() {
+  local dd
+  for dd in "$(base_dir)/profiles/"*/desktop-data; do
+    if [ -d "$dd" ] && desktop_holds_data "$dd"; then return 0; fi
+  done
+  return 1
+}
+
+# Move a folder to the Trash (so it can be put back). Uses the macOS
+# "trash" command; never deletes permanently.
+move_to_trash() {
+  if [ -x /usr/bin/trash ] && /usr/bin/trash "$1" >/dev/null 2>&1; then return 0; fi
+  die "Could not move \"$1\" to the Trash automatically." \
+    "In Finder, press Shift+Cmd+G, paste that path, and drag the folder to the Trash."
+}
+
+# Remove the launchers and the installed tool. Profile data is moved to the
+# Trash only if you say yes. Never touches your normal GitHub Desktop data,
+# your code folders or any saved login (token).
+cmd_uninstall() {
+  local base app n=0 answer
+  [ "$#" -eq 0 ] || die "uninstall does not take options." "Run: ghdp uninstall"
+  check_home
+  base="$(base_dir)"
+  say "GitHub Desktop Profiles uninstall"
+  say "Your normal GitHub Desktop, your code folders and your GitHub accounts are not touched."
+  if ! ask_yes "Remove the profile launchers and this tool?" n; then
+    say "Nothing changed."
+    return 0
+  fi
+  while IFS= read -r app; do
+    /bin/rm -rf "${app:?}"
+    say "Removed launcher: $app"
+    n=$((n + 1))
+  done < <(our_launchers)
+  if [ "$n" -eq 0 ]; then say "No launchers found."; fi
+  if [ -d "$base/bin" ] && [ ! -L "$base/bin" ]; then
+    /bin/rm -rf "${base:?}/bin"
+    say "Removed the installed copy of this tool."
+  fi
+  if [ -d "$base" ] && [ ! -L "$base" ]; then
+    say ""
+    say "Your profile data is still here: $base"
+    say "It holds profiles.json and, for each profile, its login list, repo list and settings."
+    if ask_yes "Move your profile data to the Trash too?" n; then
+      while profiles_in_use; do
+        say "Please quit every GitHub Desktop profile window first (Cmd+Q in each)."
+        read -r -p "Then press Return to continue: " answer || die "Uninstall stopped. Your profile data was kept." "Run uninstall again later."
+      done
+      move_to_trash "$base"
+      say "Moved to the Trash: $base"
+    else
+      say "Kept your profile data. Run uninstall again later to remove it."
+    fi
+  fi
+  say ""
+  say "Saved logins (tokens) stay in your Keychain, because GitHub Desktop stores them by account."
+  say "To remove one, sign out of that account inside GitHub Desktop, but only if no other window uses it."
+}
+
+cmd_launch() {
+  local name="" dry=0 arg i app gname gemail gc dd pd
+  for arg in "$@"; do
+    case "$arg" in
+      --dry-run) dry=1 ;;
+      -*) die "Unknown option \"$arg\"." "Run: ghdp help" ;;
+      *)
+        [ -z "$name" ] || die "Give only one profile name." "Example: ghdp launch office"
+        name="$arg"
+        ;;
+    esac
+  done
+  [ -n "$name" ] || die "Which profile should open?" "Example: ghdp launch office"
+  require_valid_name "$name"
+  check_home
+  check_self
+  load_config
+  i="$(find_profile "$name")" || die "There is no profile called \"$name\" in profiles.json." "Run: ghdp list"
+  check_electron_doors
+  app="$(verified_app)" || exit 1
+  gname="${P_GIT_NAMES[$i]}"
+  gemail="${P_GIT_EMAILS[$i]}"
+  gc="$(gitconfig_path "$name")" || exit 1
+  dd="$(data_dir "$name")" || exit 1
+  pd="$(profile_dir "$name")" || exit 1
+
+  # Fixed arguments only. The settings below reach only this GitHub Desktop
+  # (not your shell, not other apps). GIT_AUTHOR_* and GIT_COMMITTER_* beat
+  # every Git config file, so commits always use this profile's identity.
+  # GIT_CONFIG_* points Git at this profile's guard hooks (see above).
+  set -- /usr/bin/open -n -a "$app" \
+    --env "GIT_CONFIG_GLOBAL=$gc" \
+    --env "GIT_AUTHOR_NAME=$gname" --env "GIT_AUTHOR_EMAIL=$gemail" \
+    --env "GIT_COMMITTER_NAME=$gname" --env "GIT_COMMITTER_EMAIL=$gemail" \
+    --env "GHDP_PROFILE=$name" \
+    --env "GIT_CONFIG_COUNT=1" --env "GIT_CONFIG_KEY_0=core.hooksPath" --env "GIT_CONFIG_VALUE_0=$pd/hooks" \
+    --args "--user-data-dir=$dd"
+
+  if [ "$dry" = "1" ]; then
+    say "Dry run: all checks passed. GitHub Desktop was not opened. This would run:"
+    printf '  %s\n' "$@"
+    return 0
+  fi
+  prepare_profile "$i" "$app"
+  remove_stale_guards
+  "$@" || die "GitHub Desktop could not be started." "Try again. If it keeps failing, reinstall GitHub Desktop from https://desktop.github.com."
+}
+
+cmd_list() {
+  local app i name launcher status
+  check_home
+  load_config
+  say "Config file: $CONFIG"
+  if app="$(find_app)"; then
+    if app_signature_ok "$app"; then status="signature OK"; else status="SIGNATURE CHECK FAILED"; fi
+    say "GitHub Desktop: $app ($status)"
+  else
+    say "GitHub Desktop: not found in Applications"
+  fi
+  say ""
+  i=0
+  while [ "$i" -lt "${#P_NAMES[@]}" ]; do
+    name="${P_NAMES[$i]}"
+    launcher="$(launcher_path "$name")" || exit 1
+    if [ ! -e "$launcher" ]; then
+      status="no launcher yet (run: ghdp install)"
+    elif [ -L "$launcher" ] || [ ! -x "$launcher/Contents/MacOS/launch" ] || writable_by_others "$launcher/Contents/MacOS/launch"; then
+      status="LAUNCHER UNSAFE (run: ghdp install)"
+    else
+      status="launcher OK"
+    fi
+    say "$name  <${P_GIT_EMAILS[$i]}>  $status"
+    say "  data: $(data_dir "$name")"
+    if [ -n "${P_FOLDERS[$i]}${P_OWNERS[$i]}" ]; then
+      say "  guard: email, folders [$(printf "%s" "${P_FOLDERS[$i]}" | /usr/bin/tr "\n" " ")], owners [$(printf "%s" "${P_OWNERS[$i]}" | /usr/bin/tr "\n" " ")]"
+    else
+      say "  guard: email only (no folders or owners set)"
+    fi
+    i=$((i + 1))
+  done
+}
+
+main() {
+  PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+  export PATH LC_ALL=C
+  umask 077
+  local cmd="${1:-help}"
+  if [ "$#" -gt 0 ]; then shift; fi
+  case "$cmd" in
+    setup) cmd_setup "$@" ;;
+    init) cmd_init ;;
+    install) cmd_install "$@" ;;
+    launch) cmd_launch "$@" ;;
+    list) cmd_list ;;
+    uninstall) cmd_uninstall "$@" ;;
+    help | -h | --help) usage ;;
+    version | --version) say "$GHDP_VERSION" ;;
+    *) die "Unknown command \"$cmd\"." "Run: ghdp help" ;;
+  esac
+}
+
+# Run only when executed, not when loaded by the tests.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi
