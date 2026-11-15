@@ -4,138 +4,66 @@
 
 <br>
 
-**Run your work and personal GitHub accounts side by side in the official GitHub Desktop.**<br>
-Separate logins. Separate repos. The right email on every commit.<br>
-And a guard that **stops wrong-account commits before they happen.**
-
-<br>
+**Run your work and personal GitHub accounts side by side in GitHub Desktop.**<br>
+Separate logins, separate repo lists, the right email on every commit,<br>
+and a guard that stops wrong-account commits before they happen.
 
 [![CI](https://github.com/shiv-exe-crashed/Github_on_steroids/actions/workflows/ci.yml/badge.svg)](https://github.com/shiv-exe-crashed/Github_on_steroids/actions/workflows/ci.yml)
 ![macOS 12+](https://img.shields.io/badge/macOS-12%2B-000000?logo=apple&logoColor=white)
-![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
-![No network calls](https://img.shields.io/badge/network%20calls-0-brightgreen)
-![shellcheck](https://img.shields.io/badge/shellcheck-0%20warnings-blue)
 ![Tests](https://img.shields.io/badge/tests-141%20passing-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
-[**⚡ Install in 2 minutes**](#-install-in-2-minutes) ·
-[✨ Features](#-features) ·
-[🧭 Setup questions](#-setup-questions-explained) ·
-[🛡️ Guard](#%EF%B8%8F-the-wrong-account-guard) ·
-[🧩 Edge cases](#-edge-cases-handled) ·
-[🔒 Security](#-security-first) ·
-[❓ FAQ](#-faq)
-
 </div>
 
----
+## The problem
+
+GitHub Desktop signs in to only one github.com account at a time. With a work
+and a personal account you sign out and in again, live with one mixed repo
+list, and one tired click can push personal code to your company account (or
+the other way round). That mistake stays in the history for good.
+
+## What you get
 
 <div align="center">
-
-| 🧪 **141** automated tests | 🧨 **5** attack tests | 💬 **88** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-
+<img src="docs/assets/profiles.svg" alt="Two GitHub Desktop windows side by side, one personal and one work, each with its own repository list, and one Dock icon per account" width="90%">
 </div>
 
-## 😩 The problem
+- **One launcher per account**, each with its own colored badge in the Dock.
+- **Separate login, repo list and settings** per account. Open several at once.
+- **The right name and email on every commit.** Your own Git settings are never touched.
+- **A guard** that stops wrong-account commits and pushes with a clear message.
+- **The official GitHub Desktop.** Nothing inside the app is changed, so updates keep working.
+- No dependencies, no network calls from this tool, no admin rights.
 
-GitHub Desktop signs in to only **one** github.com account at a time. If you
-have a work account and a personal one, you know the routine:
+## Install
 
-- 🔁 **Sign out, sign in, repeat.** Every switch costs minutes.
-- 🗂️ **One mixed repo list.** Work and personal projects side by side.
-- 😬 **One tired click.** Personal code lands in your company account, or a
-  work commit carries your personal email. Forever, in the history.
+You need macOS 12 or newer and [GitHub Desktop](https://desktop.github.com) in
+your Applications folder. Nothing else.
 
-## ✨ The fix
-
-Every account gets its own **profile**: its own launcher, login, repo list and
-settings. Switching is one click, and both can be open at once.
-
-```mermaid
-flowchart LR
-    W["🟢 GitHub Desktop - work"] --> WA["Signed in as work<br/>work repos only<br/>commits as you@company.com"]
-    P["🔵 GitHub Desktop - personal"] --> PA["Signed in as personal<br/>personal repos only<br/>commits as you@users.noreply.github.com"]
-    WA -. "🛡️ wrong-account guard" .- PA
-```
-
-It runs the **official, signed GitHub Desktop**. Nothing inside the app is
-changed, so updates keep working.
-
-<div align="center">
-<img src="docs/assets/setup-demo.svg" alt="The setup wizard asks a few questions and creates one launcher per account" width="90%">
-</div>
-
----
-
-## 🚀 Features
-
-| | |
-|---|---|
-| 🖱️ **One click per account** | A launcher app per profile, each with its own colored letter badge. Open it from Applications, Spotlight or your Dock. |
-| 🗂️ **Truly separate** | Own login, repo list, settings and theme per profile. Nothing leaks between them. |
-| 👥 **As many accounts as you need** | Not just two: work, personal, open source, every client… up to **20 profiles**. |
-| 🪟 **Side by side** | Open several profiles at once. Click one again and its window comes to the front, never a duplicate. |
-| 🪪 **The right identity, every commit** | Each profile commits with its own name and email. Your global `~/.gitconfig` is never touched. |
-| 🛡️ **Wrong-account guard** | Commits, merges and pushes in the wrong profile are stopped with a clear message that names the right profile. |
-| 🚀 **One-line install** | Paste one line into Terminal. It needs no Git and no extra tools. |
-| 🪄 **Guided setup** | A friendly wizard asks a few questions, often just one (press **Return**). No config files to edit. |
-| ⚡ **No sign-in for your current account** | Setup can copy your current GitHub Desktop into the first profile, so it opens already signed in, with your repos. |
-| 🔒 **Security first** | Never touches your tokens, verifies GitHub Desktop's signature before every launch, keeps profile data private. |
-| 📦 **Zero dependencies** | Plain bash and tools that ship with macOS. Works offline. One readable file. |
-| 🧹 **Clean, reversible uninstall** | Removes only what it made. Your data goes to the Trash only if you say so. |
-
-### 🤔 Why not just…?
-
-| | Sign out & in | SSH keys + Git config tricks | GitHub Desktop beta (multi-account) | **GitHub Desktop Profiles** |
-|---|:---:|:---:|:---:|:---:|
-| One-click switch in GitHub Desktop | ❌ | ❌ | ✅ | ✅ |
-| Separate repo list per account | ❌ | ❌ | ❌ one shared list | ✅ |
-| Right email per account, automatically | ❌ | ⚠️ by folder, set up by hand | ❌ author is not changed | ✅ |
-| Stops wrong-account commits and pushes | ❌ | ❌ | ❌ | ✅ |
-| Official, unmodified GitHub Desktop | ✅ | ✅ | ✅ beta channel | ✅ stable |
-
----
-
-## ⚡ Install in 2 minutes
-
-**You need:** a Mac with macOS 12 or newer, and [GitHub Desktop](https://desktop.github.com)
-in your Applications folder. That's all: no Git, no extra tools.
-
-### The fastest way: paste one line
-
-1. Press **Cmd + Space**, type **Terminal**, and press **Return**.
-2. Copy this whole line, paste it into Terminal, and press **Return**:
+1. Press **Cmd + Space**, type **Terminal**, press **Return**.
+2. Paste this line and press **Return**:
 
    ```bash
    cd ~/Downloads && curl -fsSL https://github.com/shiv-exe-crashed/Github_on_steroids/archive/refs/heads/main.zip -o Github_on_steroids.zip && unzip -qo Github_on_steroids.zip && bash Github_on_steroids-main/install-mac.command
    ```
 
-3. The setup asks a few questions. Press **Return** to accept the suggested
-   answer each time. [What to answer](#what-to-answer) shows an example.
+3. Answer the questions. Press **Return** to accept the suggested answer.
 
-*What does that line do?* It downloads this project as a ZIP from GitHub into
-your Downloads folder, unzips it, and starts the setup. Nothing else is
-downloaded or installed, and it never asks for a password.
+<div align="center">
+<img src="docs/assets/setup-demo.svg" alt="The setup asks a few questions and creates one launcher per account" width="90%">
+</div>
 
-*Want to read the code first?* Use one of the other ways below, then start the
-setup yourself with `bash install-mac.command`.
+The line downloads this project as a ZIP into your Downloads folder, unzips it
+and starts the setup. It never asks for a password.
 
-### Other ways to get the code
+<details>
+<summary>Other ways to get the code (read it first, or use GitHub Desktop)</summary>
 
-**With GitHub Desktop (no Terminal needed)**
+**With GitHub Desktop:** choose **File, Clone Repository, URL**, paste
+`https://github.com/shiv-exe-crashed/Github_on_steroids`, click **Clone**, then
+**Repository, Show in Finder** and double-click `install-mac.command`.
 
-1. Open **GitHub Desktop** (your normal one).
-2. In the menu bar choose **File → Clone Repository…**
-3. Click the **URL** tab, paste this link, and click **Clone**:
-   ```
-   https://github.com/shiv-exe-crashed/Github_on_steroids
-   ```
-4. In the menu bar choose **Repository → Show in Finder**.
-5. In the Finder window, **double-click `install-mac.command`**. A Terminal
-   window opens and the setup starts.
-
-**With Git in Terminal**
+**With Git in Terminal:**
 
 ```bash
 cd ~/Documents
@@ -143,498 +71,201 @@ git clone https://github.com/shiv-exe-crashed/Github_on_steroids.git
 bash Github_on_steroids/install-mac.command
 ```
 
-(If your Mac asks to install "command line developer tools" the first time
-you use `git`, say yes and run the commands again.)
+</details>
 
 ### What to answer
 
-The setup asks one question at a time and explains itself. Press **Return** to
-accept the answer shown in `[brackets]`. Never type a password here.
-
-**If GitHub Desktop is already signed in** and your Git email is your GitHub
-**noreply** email (see the tip below), you get a quick summary instead of many
-questions. Press **Return** once: your current GitHub Desktop becomes the
-profile `personal`, with your GitHub username already filled in.
-
-**Otherwise**, and for a second account, the setup asks for each answer.
-Example for someone with a personal and a work account (use your own names
-and emails):
+Example for a personal and a work account (use your own names and emails):
 
 | The setup asks | You type |
 |---|---|
-| Copy them into your first profile? | `y` if GitHub Desktop is signed in to one of your accounts today, otherwise `n` |
+| Copy them into your first profile? | `y` if GitHub Desktop is signed in today |
 | Name for profile 1 | `personal` |
-| Name on commits | your name (just press **Return**) |
-| Email on commits | `12345+yourname@users.noreply.github.com` |
-| Folders | press **Return** (skip) |
-| GitHub owners | `yourname` (your GitHub username) |
-| Add another profile? | `y` |
-| Name for profile 2 | `work` |
-| Email on commits | `you@company.com` |
-| Folders | press **Return** (skip) |
-| GitHub owners | `your-company, your-work-username` |
-| Add another profile? | `n` |
+| Email on commits | your GitHub noreply email (see the tip) |
+| Folders | press **Return** to skip |
+| GitHub owners | your GitHub username |
+| Add another profile? | `y`, then `work`, `you@company.com`, `your-company` |
 | Create these profiles? | `y` |
 
-> [!TIP]
-> **Which email should I use?** Use your GitHub **noreply** email, so your
-> real address never shows up in public commits. On github.com open
-> **Settings → Emails**, tick **Keep my email addresses private**, and copy
-> the address that ends in `@users.noreply.github.com`. Set it as your Git
-> email in GitHub Desktop (**Settings → Git**) before you run the setup, and
-> the quick summary above appears.
+If GitHub Desktop is signed in and your Git email is your GitHub noreply
+email, the setup shows a quick summary instead: press **Return** once.
 
-Every question is explained in the table below:
-[setup questions explained](#-setup-questions-explained).
+**Tip, which email?** Use your GitHub noreply email so your real address never
+shows in public commits: on github.com open **Settings, Emails**, tick **Keep
+my email addresses private**, and copy the address that ends in
+`@users.noreply.github.com`.
 
-### Open your profile
+Every question is explained in [docs/USAGE.md](docs/USAGE.md).
 
-At the end the setup asks **Open "GitHub Desktop - personal" now?** Press
-**Return**. Later, open any profile from your **Applications** folder (in
-Finder press **Shift + Cmd + H**, then open **Applications**) or press
-**Cmd + Space** and type its name.
-
-New profiles sign in once: see [first sign-in](#-first-sign-in). That's it. 🎉
-
-### ➕ Adding another account later
-
-Double-click **`install-mac.command`** again and press **Return** (the first
-choice, **1) Add a profile**). You are asked only about the new account: a
-name, its commit email, and its GitHub owner. **Your other profiles are not
-asked about and not changed.** Then open the new launcher and sign in once.
-
-Terminal users: `mac/ghdp add`. To take an account away: choose **2** in the
-same menu, or run `mac/ghdp remove <name>` (its data is kept unless you ask
-for the Trash).
-
----
-
-## 🧭 Setup questions explained
-
-Press **Return** to accept the value shown in `[brackets]`. Never type a
-password here: you sign in later, inside GitHub Desktop.
-
-| The wizard asks | What it means | What to type |
-|---|---|---|
-| **What do you want to do?** *(only if you already have profiles)* | A small menu: **1** adds a profile (only the new one is asked about), **2** removes one, **3** starts over and replaces all, **4** just refreshes the launchers. | **1** to add an account |
-| **Does this look right?** *(quick setup, only if GitHub Desktop is signed in and your Git email is a GitHub noreply email)* | A summary of the guessed answers: profile `personal`, your name and email, and your GitHub username as the guard's owner. | **y** (press **Return**). **n** lets you answer each question yourself. |
-| **Copy them into your first profile…?** *(only if GitHub Desktop is already set up)* | Turn your current GitHub Desktop (its login and repo list) into your first profile, so that account doesn't sign in again. The original is never changed. | **y** (recommended) |
-| **Name for profile 1** | A short name for this profile. It becomes the launcher name, e.g. "GitHub Desktop - work". | `work`, `personal`, `opensource`… (letters, numbers, `-` and `_`) |
-| **Name on commits** | The author name shown on commits from this profile. | Your name |
-| **Email on commits for this account** | The email on commits from this profile. | That account's email, e.g. its GitHub **noreply** email (github.com → Settings → Emails). |
-| **Folders used ONLY for this account's repos** *(optional)* | Where this account's repos live. The guard then knows a repo there belongs to this profile. | e.g. `~/work`. **Skip** it if work and personal repos share a folder. |
-| **GitHub owners for this account** *(recommended)* | The GitHub username and organizations this account works with: the part after `github.com/` in a repo link. | e.g. `my-company, my-work-username` |
-| **Add GitHub owners now?** *(only if you skipped both)* | Without folders or owners, the guard can only check the email. | **y** (recommended) |
-| **Add another profile?** | Set up your next account. | **y** for each extra account, then **n** |
-| **Create these profiles?** | A last look at the summary. | **y** |
-| **Open "GitHub Desktop - …" now?** *(at the end)* | Opens the new profile for you, so you don't have to find it in Finder. | **y** (press **Return**) |
-| **Please quit GitHub Desktop now** *(when copying)* | The copy needs GitHub Desktop closed, so its data is complete. | Press **Cmd + Q** in GitHub Desktop, then **Return** |
-
-> [!TIP]
-> If you used to switch accounts inside one GitHub Desktop, the copied profile
-> also gets the other account's repos. Setup reminds you to remove them there
-> (right-click → **Remove**; the files stay on your disk) and to add them in
-> the right profile (**File → Add Local Repository**).
-
----
-
-## 🔑 First sign-in
-
-Each new profile signs in **once**:
-
-1. In your **browser**, open github.com and check that you're on the **right
-   account**.
-2. Make sure **no other GitHub Desktop window is open**.
-3. Open the profile's launcher → **Sign in to GitHub.com → Continue With
-   Browser** → **Authorize** → allow "Open GitHub Desktop".
-4. On **Configure Git**, choose **Configure manually**. You'll see this
-   profile's name and email. Click **Finish**.
-5. Check **Settings → Accounts**: it shows the right account. ✅
-6. Open **Settings → Git → Hooks** and make sure **"Load Git hook environment
-   variables from shell"** is **unticked** (it is by default). Why: see
-   [the note under the guard](#-good-to-know-github-desktops-hooks-setting).
-
-> [!TIP]
-> Give each profile its own theme (**Settings → Appearance**), for example
-> Light for work and Dark for personal. You'll always know which window is
-> which.
-
----
-
-## 🛡️ The wrong-account guard
-
-Before every commit, merge and push, a small guard checks that you're in the
-right profile. Open a work repo in your personal profile by mistake, and this
-is what you see:
+### Open a profile and sign in
 
 <div align="center">
-<img src="docs/assets/guard-demo.svg" alt="Commit failed: gh-desktop-profiles stopped this in the personal profile and names the work profile" width="90%">
+<img src="docs/assets/launchers.svg" alt="The Applications folder in your home folder with one launcher per account" width="80%">
 </div>
 
-**No commit is made.** Open the same repo in the work profile, and it just
-works.
+The setup offers to open your first profile. Later, open any launcher from
+your Applications folder, or press **Cmd + Space** and type its name. Each new
+profile signs in once:
+
+1. In your browser, check you are on the right GitHub account.
+2. Close every other GitHub Desktop window.
+3. Open the launcher, click **Sign in to GitHub.com**, **Continue With Browser**, **Authorize**.
+4. On **Configure Git** choose **Configure manually** and click **Finish**.
+5. Open **Settings, Accounts** and check it shows the right account.
+6. Open **Settings, Git, Hooks** and keep **Load Git hook environment variables from shell** unticked (see below).
+
+To add another account later, run the install line again and press **Return**
+(choice 1, Add a profile). Your other profiles are not touched.
+
+## The wrong-account guard
+
+Before every commit, merge and push, a small guard checks that you are in the
+right profile. Open a work repo in your personal profile by mistake and you see this:
+
+<div align="center">
+<img src="docs/assets/guard-demo.svg" alt="Commit failed: the guard stopped a work repo in the personal profile and names the work profile" width="90%">
+</div>
+
+No commit is made. Open the same repo in the right profile and it just works.
 
 | It stops | Example |
 |---|---|
 | A repo of another profile's GitHub owner | A `my-company/*` repo in the personal profile |
 | A repo in another profile's folder | Something in `~/work` in the personal profile |
-| A commit with the wrong email | Anything that would not use this profile's email |
-| A push of new commits made under another email | Commits made outside this profile, pushed from it |
-| A push to an owner this profile doesn't use | Pushing to a fork owned by the other account |
+| A commit or push under the wrong email | Anything not made with this profile's email |
 
-Your repos' own Git hooks (husky, pre-commit and friends) **keep working**:
-the guard runs first, then hands over to them.
+Your repos' own Git hooks (husky and friends) keep working: the guard runs
+first, then hands over to them.
 
-### 🪧 Good to know: GitHub Desktop's hooks setting
-
-The guard is a **safety net against mistakes**, not a lock. GitHub Desktop has
-**Settings → Git → Hooks → "Load Git hook environment variables from shell"**.
-We tested both positions (GitHub Desktop 3.6.11, macOS):
-
-| The setting | What you see when the guard stops a commit |
-|---|---|
-| **Off** (the default; keep it like this) | **Commit failed**, with the guard's message and only a **Close** button. |
-| On | The guard still runs and shows the same message, but GitHub Desktop adds an **Ignore and Continue** button. One click skips the guard. |
-
-So: leave it **off**. That way a wrong-account commit is simply refused. Turn
-it on only if one of your own repo hooks needs your shell's environment (for
-example tools managed by nvm or rbenv). GitHub Desktop can also skip hooks on
-purpose (the commit options menu has **Bypass Commit Hooks**); that is your
-choice to make, and the guard does not try to fight it.
-
-*Not tested yet:* what this setting does to the guard on **push** (the commit
-check is the one we tried).
-
-### 👥 Working on a repo that belongs to someone else's account
-
-Teams share repos: a teammate's personal account, a client's organization, or
-your own other account added as a **collaborator**. The guard blocks these by
-default, because the owner is not one of the profile's owners. Allow **just
-that one repo** for the profile that should use it:
+**A repo that belongs to someone else's account** (a teammate, a client)? Allow
+just that one repo for the profile that should use it:
 
 ```bash
 mac/ghdp allow work some-owner/shared-repo
 ```
 
-- It takes effect at once. No restart, no setup.
-- Only that repo is allowed. Other repos of `some-owner` stay protected, and
-  the email check still applies.
-- You can paste the repo link too: `mac/ghdp allow work https://github.com/some-owner/shared-repo`.
-- See what you allowed with `mac/ghdp list`. Undo it by deleting the repo from
-  `"repos"` in `profiles.json`, then run `mac/ghdp install`.
+**The guard is a safety net, not a lock.** GitHub Desktop has a setting,
+**Settings, Git, Hooks, Load Git hook environment variables from shell**. Keep
+it **off** (the default): then a wrong-account commit is simply refused. With it
+**on**, GitHub Desktop adds an **Ignore and Continue** button that skips the
+guard. We tested both. Not tested yet: that setting on **push**.
 
-> [!NOTE]
-> The guard is only a safety net on your Mac. Whether an account **may** push
-> to a repo is decided by GitHub: add the account as a collaborator there first.
+## Everyday use
 
----
-
-## 🧩 Edge cases handled
-
-The difference between a script and a tool you can trust. Every row below is
-handled on purpose. Almost all are covered by automated tests; the rest
-(like a double-click on a launcher) were checked by hand.
-
-<details open>
-<summary><b>🔀 Git and GitHub</b></summary>
-
-| Situation | What happens |
-|---|---|
-| A repo uses its own hooks folder (husky) | The guard can't be switched off by it, and the repo's hooks still run. |
-| You merge `main` into your branch, or merge pull requests on github.com | Never flagged: only your **new** commits (not on GitHub yet) are checked. |
-| Merge commits | Checked like normal commits. |
-| SSH host aliases (`work-github:company/repo`) | Understood; the owner is checked as usual. |
-| A force-push the guard can't fully see | The push is stopped instead of guessed. |
-| A token hidden in a remote URL (`https://user:token@…`) | Never shown on screen. |
-| A remote URL with a newline or odd characters | Refused safely, never run. |
-| A remote URL with tricks (`../`, `%2f`, `?`, `#`, spaces) meant to look like another owner | Refused: the guard only trusts URLs it can read exactly as Git will use them. |
-| A local backup remote with spaces in its path | Works. |
-| A repo opened from a browser link lands in the wrong profile | The first commit is stopped, naming the right profile. |
-
-</details>
-
-<details open>
-<summary><b>🗂️ Profiles and setup</b></summary>
-
-| Situation | What happens |
-|---|---|
-| Two names that differ only in capitals (`Work` vs `work`) | Treated as the same, because Mac folders ignore case. |
-| A profile renamed (`my_work` → `my-work`) or removed | Its old launcher and guard rules are cleaned up. |
-| A typo in a setting (`gitEmial`) | Refused with a clear message, never silently ignored. |
-| Wrong types, nested objects, line breaks in settings | Each is refused with a message that says what to fix (21 broken-config cases tested). |
-| Setup run twice | Nothing breaks or doubles up. Settings GitHub Desktop added to a profile are kept. |
-| You add a profile later | Your other profiles are not asked about again and not changed: logins, repos, settings and guard rules stay. |
-| You remove a profile | Its launcher and guard rules go. Its data stays on your Mac unless you choose the Trash, and never while its window is open. |
-| A removed profile's name is added again | Refused while its old data is still there, so a new account can never inherit an old login by accident. |
-| Setup cancelled before you confirm | Nothing is written. |
-| A copy interrupted halfway | The partial copy never counts as profile data. |
-| GitHub Desktop still open while copying | Setup waits until it's closed, so the data is complete. |
-| A launcher clicked twice | No second window: the existing one comes to the front. |
-| 20 profiles | Still fast: settings load in about a second. |
-
-</details>
-
-<details open>
-<summary><b>🔐 Safety</b></summary>
-
-| Situation | What happens |
-|---|---|
-| A damaged or fake GitHub Desktop | Its digital signature (proof that GitHub made it) fails the check, so nothing opens. |
-| A risky setting (`NODE_OPTIONS`) is on for your whole Mac session | The launch is refused, with steps to fix it. |
-| A shortcut (symlink) planted to trick the tool into writing somewhere else | Refused, or replaced, never followed. |
-| Another user can write to `~/Applications` | Launchers are not installed there until it's fixed. |
-| A profile folder with loose permissions | Fixed to owner-only on the next run. |
-| An empty variable in a delete | Impossible: every recursive delete is guarded. |
-
-</details>
-
----
-
-## 🔒 Security first
-
-This tool sits next to your GitHub logins, so it was built like a security
-tool:
-
-- 🔑 **Never touches your tokens.** It has no code to read, store, print or
-  send them. GitHub Desktop keeps them in your macOS Keychain, as always.
-- 🌐 **No network calls. No telemetry. No auto-update.** Checked
-  automatically on every change.
-- ✍️ **Checks GitHub Desktop before every launch:** its digital signature must
-  prove that GitHub made it (GitHub's developer ID is `VEKTX9H2N7`).
-- 🧱 **Private by default:** profile folders are readable by you only, and
-  this is checked on every run.
-- 🚫 **Refuses risky settings** that would let other programs sneak their own
-  code into GitHub Desktop.
-- 🙅 **No admin rights, no system changes.** Your `~/.gitconfig` is never
-  edited.
-- 🧪 **Reviewed like an attacker would:** two rounds of review; every
-  weakness found was fixed and turned into a test.
-
-📖 [How it works](docs/HOW_IT_WORKS.md) ·
-[Threat model](THREAT_MODEL.md) ·
-[Security review](docs/SECURITY_REVIEW.md) ·
-[Report a problem](SECURITY.md)
-
-### 🔍 Don't trust us, check it yourself
-
-- The whole tool is **one readable file**: [`mac/ghdp`](mac/ghdp).
-- See the exact command a launcher runs, without running it:
-  ```bash
-  mac/ghdp launch work --dry-run
-  ```
-- Confirm there are no network commands or `eval`:
-  ```bash
-  bash scripts/check-policy.sh
-  ```
-- Run the test suite (it uses a throwaway home folder):
-  ```bash
-  brew install bats-core && bats tests/mac
-  ```
-
----
-
-## 🛠️ Everyday commands
-
-The launchers are all you need day to day. For everything else:
+You only need the launchers. For the rest:
 
 | Command | What it does |
 |---|---|
-| `bash install-mac.command` | Guided setup. With profiles already there it shows a menu: add, remove, start over, refresh. |
-| `mac/ghdp add` | Add one more profile; the others stay as they are |
-| `mac/ghdp remove [name]` | Remove a profile (its data is kept unless you choose the Trash) |
-| `mac/ghdp list` | Your profiles, their guard rules, and a health check |
-| `mac/ghdp allow <name> <owner/repo>` | Let a profile use one repo of an owner it doesn't use |
-| `mac/ghdp install` | Rebuild launchers after editing your profiles by hand |
-| `mac/ghdp launch <name>` | Open a profile from Terminal (add `--dry-run` to only show the command) |
+| `bash install-mac.command` | Setup. With profiles already there it shows a menu: add, remove, start over, refresh. |
+| `mac/ghdp add` | Add one more profile, the others stay as they are |
+| `mac/ghdp remove <name>` | Remove a profile (its data is kept unless you choose the Trash) |
+| `mac/ghdp list` | Your profiles and a health check |
 | `bash uninstall-mac.command` | Remove everything this tool made (it asks first) |
 
-<details>
-<summary><b>✍️ Prefer editing settings by hand?</b></summary>
+All commands, editing `profiles.json` by hand and updating: [docs/USAGE.md](docs/USAGE.md).
 
-Profiles live in `~/Library/Application Support/gh-desktop-profiles/profiles.json`.
-Edit it, then run `mac/ghdp install`:
+## Security
 
-```json
-{
-  "version": 1,
-  "profiles": [
-    { "name": "work", "gitName": "Your Name", "gitEmail": "you@company.com",
-      "owners": ["my-company", "my-work-username"] },
-    { "name": "personal", "gitName": "Your Name", "gitEmail": "12345+you@users.noreply.github.com",
-      "owners": ["my-personal-username"] }
-  ]
-}
-```
+This tool sits next to your GitHub logins, so it is built like a security tool.
 
-Optional per profile: `"folders": ["~/work"]`, `"owners": [...]` and
-`"repos": ["some-owner/shared-repo"]` (single repos of other owners; see
-[`mac/ghdp allow`](#-working-on-a-repo-that-belongs-to-someone-elses-account)).
-</details>
+- It never reads, stores, prints or sends your tokens. GitHub Desktop keeps them in your Keychain, as before.
+- No network calls, no telemetry, no auto-update. Checked by a test on every change.
+- It checks GitHub Desktop's digital signature before every launch.
+- Profile folders are readable by you only. No admin rights, and your `~/.gitconfig` is never edited.
+- It refuses risky settings that would let other programs sneak code into GitHub Desktop.
+- Three rounds of attacker-style review. Every weakness found was fixed and became a test.
 
-**Updating:** run the [one-line install](#the-fastest-way-paste-one-line)
-again (or, if you cloned it, **Fetch** → **Pull** in GitHub Desktop). Then,
-when the setup shows its menu, choose **4** ("Nothing, just refresh the
-launchers"). Your launchers are refreshed and your profiles stay.
+Details: [how it works](docs/HOW_IT_WORKS.md), [threat model](THREAT_MODEL.md),
+[security review](docs/SECURITY_REVIEW.md), [edge cases](docs/EDGE_CASES.md).
+Found a problem? See [SECURITY.md](SECURITY.md).
 
----
-
-## 🗑️ Uninstall
-
-Double-click **`uninstall-mac.command`**:
-
-1. It asks before doing anything.
-2. It removes the launchers and the tool.
-3. It asks whether to move your profile data to the **Trash** (you can put it
-   back).
-
-Your normal GitHub Desktop, your code and your GitHub accounts are never
-touched.
-
-> [!NOTE]
-> Saved logins stay in your Keychain. To remove one, sign out inside that
-> profile first, but only if no other window uses that account.
-
----
-
-## ❓ FAQ
+## FAQ
 
 <details>
-<summary><b>Does it modify GitHub Desktop?</b></summary>
+<summary>Does it modify GitHub Desktop?</summary>
 
 No. It starts the official, signed app with a separate data folder per
-profile. Nothing inside the app is changed, and updates keep working.
+profile. For the Dock icon it opens a private copy of GitHub Desktop (instant
+and free on disk, because Macs clone files) in a hidden folder,
+`~/Applications/.gh-desktop-profiles/`. If a copy can't be made, the normal
+app opens. Skip the copy with `mac/ghdp launch <name> --plain`.
 </details>
 
 <details>
-<summary><b>Several people (or accounts) work on the same repo. Does the guard get in the way?</b></summary>
+<summary>Why do the windows still say "GitHub Desktop" in the menu bar and Mission Control?</summary>
 
-Only on your own Mac, and only for **your** profiles. Your teammates are not
-affected. For a repo whose owner your profile doesn't use, run
-`mac/ghdp allow <profile> <owner/repo>` once. See
-[Working on a repo that belongs to someone else's account](#-working-on-a-repo-that-belongs-to-someone-elses-account).
-Everything under an owner your profile **does** use (for example your whole
-company organization) works without any extra step.
+Only the icon is different. macOS reads the app name from files that are part
+of the app's security seal. Changing it breaks the seal, and macOS then refuses
+to open the app ("damaged and can't be opened"). We tried and dropped it on
+purpose. To tell windows apart, use the Dock icon and give each profile its own
+theme (Light or Dark) in **Settings, Appearance**.
 </details>
 
 <details>
-<summary><b>How do I add another account later?</b></summary>
+<summary>GitHub Desktop asks "Move GitHub Desktop to the Applications folder?"</summary>
 
-Double-click `install-mac.command` again and choose **1) Add a profile**. You
-are asked only about the new account (name, email, owners). Your other
-profiles are not touched. Then open the new launcher and sign in once. From
-Terminal: `mac/ghdp add`. To take one away: choose **2**, or run
-`mac/ghdp remove <name>`.
+Click **Not Now**, never **Move and Restart** (it could replace the real app).
+The private copies live inside an Applications folder to avoid this question,
+so tell us if you still see it.
 </details>
 
 <details>
-<summary><b>Can I use more than two accounts?</b></summary>
+<summary>How many accounts can I use?</summary>
 
-Yes, up to 20 profiles. Work, personal, open source, each client: one launcher
-each.
+Up to 20 profiles: work, personal, open source, one per client. Add one later
+by running the install line again.
 </details>
 
 <details>
-<summary><b>Can I have work and personal open at the same time?</b></summary>
+<summary>Can I use the same account in two profiles?</summary>
 
-Yes. Each profile runs in its own window. Give them different themes to tell
-them apart.
+Yes, but they share one saved login: signing out in one signs out the other.
 </details>
 
 <details>
-<summary><b>Does it work with company single sign-on (SSO)?</b></summary>
+<summary>Does it send data anywhere?</summary>
 
-Sign-in is GitHub Desktop's normal browser sign-in, so your company's usual
-login page appears as it always does.
+The tool makes no network calls. GitHub Desktop itself can send usage stats:
+untick **Settings, Advanced, usage stats** in each profile if you don't want that.
 </details>
 
 <details>
-<summary><b>Where are my passwords and tokens?</b></summary>
+<summary>Does it work with company single sign-on?</summary>
 
-GitHub Desktop keeps them in your macOS Keychain, exactly as before. This tool
-never reads or copies them.
+Yes. Sign-in is GitHub Desktop's normal browser sign-in, so your company's
+usual login page appears.
 </details>
 
-<details>
-<summary><b>Why do both windows show the same icon in the Dock?</b></summary>
+## Uninstall
 
-A running window shows the icon of the app file that runs it. That used to be
-GitHub Desktop itself, so every profile looked the same. Now each profile runs
-its own copy, with its own badge. You can still drag the launchers into your
-Dock for one-click access, and Light and Dark themes help tell windows apart.
+Double-click **`uninstall-mac.command`**. It asks before doing anything, removes
+the launchers, the tool and the private copies, and asks whether to move your
+profile data to the Trash. Your normal GitHub Desktop, your code and your GitHub
+accounts are never touched. Saved logins stay in your Keychain: to remove one,
+sign out inside that profile first.
 
-**Each profile now has its own Dock icon.** When you open a profile, the tool
-opens a private copy of GitHub Desktop for it (instant and free on disk,
-because Macs clone files) with the profile's colored letter badge on it. So the
-Dock shows a different icon per profile, matching its launcher. GitHub Desktop
-itself is never changed, and the copy must pass the same GitHub signature
-check. It is made again when GitHub Desktop updates. If a copy can't be made,
-the profile simply opens with GitHub Desktop's normal icon. To skip the copy,
-run `mac/ghdp launch <name> --plain`.
-
-*Where the copies live:* in a hidden folder, `~/Applications/.gh-desktop-profiles/`.
-They must sit inside an "Applications" folder, otherwise GitHub Desktop asks
-"Move GitHub Desktop to the Applications folder?" in every window. **If you ever
-see that question, click Not Now, never "Move and Restart"** (it could replace
-the real app). Removing a profile or uninstalling deletes its copy.
-
-*Good to know:* only the **icon** is different. The name in the menu bar,
-Cmd + Tab and Mission Control still says "GitHub Desktop". macOS reads that
-name from files that are part of the app's security seal. Changing it breaks
-the seal, and macOS then refuses to open the app ("damaged and can't be
-opened"). We tried it and dropped it on purpose. To tell windows apart, use the
-Dock icon and give each profile its own theme (Light or Dark).
-</details>
-
-<details>
-<summary><b>Can I use the same account in two profiles?</b></summary>
-
-You can, but they share one saved login: signing out in one signs out the
-other.
-</details>
-
-<details>
-<summary><b>Does it send any data anywhere?</b></summary>
-
-No. The tool makes no network calls at all. GitHub Desktop itself can send
-usage stats: untick **Settings → Advanced → usage stats** in each profile if
-you don't want that.
-</details>
-
-<details>
-<summary><b>Is it free?</b></summary>
-
-Yes, MIT licensed. Use it, share it, improve it.
-</details>
-
----
-
-## 🩺 Troubleshooting
+## Troubleshooting
 
 | You see | Do this |
 |---|---|
-| *"install-mac.command" cannot be opened* | It came from a browser download, which macOS blocks. Use the [one-line install](#the-fastest-way-paste-one-line) (it avoids this), or run `bash install-mac.command` in Terminal from that folder. |
+| *"install-mac.command" cannot be opened* | It came from a browser download. Use the install line above, which avoids this. |
 | Sign-in keeps waiting | Close every other GitHub Desktop window, then sign in again. |
-| *GitHub Desktop … failed the signature check* | Reinstall GitHub Desktop from [desktop.github.com](https://desktop.github.com). |
-| *The setting NODE_OPTIONS is turned on…* | Something set a risky setting for your whole session. Remove it from your shell files and run `launchctl unsetenv NODE_OPTIONS`. |
-| *Commit failed: gh-desktop-profiles stopped this…* | That's the guard doing its job. Open the repo in the profile it names. |
-| A profile shows another account's repos | Right-click them → **Remove** (files stay on disk), then add them in the right profile. |
-| Anything else | `mac/ghdp list` runs a quick health check. Every error message says what to do next. |
+| *GitHub Desktop failed the signature check* | Reinstall GitHub Desktop from [desktop.github.com](https://desktop.github.com). |
+| *The setting NODE_OPTIONS is turned on* | Something set a risky setting for your whole session. Remove it from your shell files and run `launchctl unsetenv NODE_OPTIONS`. |
+| *Commit failed: gh-desktop-profiles stopped this* | The guard doing its job. Open the repo in the profile it names. |
+| A profile shows another account's repos | Right-click them, **Remove** (files stay on disk), then add them in the right profile. |
+| Anything else | `mac/ghdp list` runs a health check. Every error says what to do next. |
 
----
+## Contributing
 
-## 🤝 Contributing
-
-Ideas, bug reports and pull requests are very welcome. Please read
-[CONTRIBUTING.md](CONTRIBUTING.md) first. For security problems, see
-[SECURITY.md](SECURITY.md).
+Ideas, bug reports and pull requests are welcome. Please read
+[CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 <div align="center">
 
-### ⭐ If this saved you from even one wrong-account push, give it a star!
+If this saved you from a wrong-account push, a star helps others find it.
 
-It helps other developers with two GitHub accounts find it.
-
-Made with ❤️ for everyone juggling work and personal GitHub · [MIT License](LICENSE)
+[MIT License](LICENSE)
 
 <sub>An independent open-source project. It is not made by, affiliated with, or endorsed by GitHub, Inc.
 "GitHub" and "GitHub Desktop" are trademarks of GitHub, Inc. This tool only starts the official app

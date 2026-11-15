@@ -26,6 +26,9 @@ First public release, for macOS.
   Desktop, private folders, refusal of risky Electron settings.
 - Clean uninstall (`uninstall-mac.command`). Profile data goes to the Trash
   only if you say yes.
+- Shorter README with clean headings and three pictures (two windows and the Dock,
+  the launchers, the setup). The long tables moved to `docs/USAGE.md` and
+  `docs/EDGE_CASES.md`; nothing was removed.
 - Each profile now has its own Dock icon: opening a profile runs a private,
   signature-checked copy of GitHub Desktop that carries the profile's badge
   (an instant APFS clone, no extra disk space). If the copy cannot be made,
