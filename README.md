@@ -102,35 +102,64 @@ changed, so updates keep working.
 - macOS 12 or newer
 - [GitHub Desktop](https://desktop.github.com) in your Applications folder
 
-### 1️⃣ Get the code
+### 1️⃣ Get the code and start the setup
 
-Pick one:
+**Pick ONE way.** All three end in the same place: a Terminal window that
+asks you a few questions.
 
-- **With GitHub Desktop (easiest):** on this page click **Code → Open with
-  GitHub Desktop**, then **Clone**.
-- **With Terminal:**
-  ```bash
-  git clone https://github.com/shiv-exe-crashed/Github_on_steroids.git
-  ```
-- **As a ZIP:** click **Code → Download ZIP** and unzip it. Use the Terminal
-  command in step 2: macOS blocks double-clicking files that came from a
-  browser download.
+| I use… | Go to |
+|---|---|
+| **GitHub Desktop** and don't like Terminal | [Way A](#way-a-with-github-desktop-no-terminal-needed) |
+| **Terminal** | [Way B](#way-b-with-terminal-only) |
+| Neither (I only want to download a file) | [Way C](#way-c-download-a-zip) |
 
-### 2️⃣ Run the setup
+#### Way A: with GitHub Desktop (no Terminal needed)
 
-In Finder, open the folder and **double-click `install-mac.command`**.
+1. Open **GitHub Desktop** (your normal one).
+2. In the menu bar choose **File → Clone Repository…**
+3. Click the **URL** tab, paste this link, and click **Clone**:
+   ```
+   https://github.com/shiv-exe-crashed/Github_on_steroids
+   ```
+4. In the menu bar choose **Repository → Show in Finder**.
+5. In the Finder window, **double-click `install-mac.command`**.
+   A Terminal window opens and the setup starts. Next: step 2 below.
 
-> Downloaded a ZIP? Run it from Terminal instead:
-> ```bash
-> cd ~/Downloads/Github_on_steroids-main && bash install-mac.command
-> ```
+#### Way B: with Terminal only
 
-### 3️⃣ Answer a few questions
+Open **Terminal** (Cmd + Space, type `Terminal`) and run these three
+commands, one after the other:
+
+```bash
+cd ~/Documents
+git clone https://github.com/shiv-exe-crashed/Github_on_steroids.git
+bash Github_on_steroids/install-mac.command
+```
+
+The first line goes to your Documents folder, the second downloads the code,
+the third starts the setup. (If your Mac asks to install "command line
+developer tools" the first time you use `git`, say yes and run the commands
+again.) Next: step 2 below.
+
+#### Way C: download a ZIP
+
+1. On this page click **Code → Download ZIP** and double-click the ZIP to
+   unzip it in your Downloads folder.
+2. Open **Terminal** and run:
+   ```bash
+   cd ~/Downloads/Github_on_steroids-main
+   bash install-mac.command
+   ```
+
+Use Terminal here, not a double-click: macOS blocks double-clicking files
+that came from a browser download. Next: step 2 below.
+
+### 2️⃣ Answer the questions
 
 The wizard explains itself as it goes. The full list is just below:
 [setup questions explained](#-setup-questions-explained).
 
-### 4️⃣ Open your profiles
+### 3️⃣ Open your profiles
 
 In Finder press **Shift + Cmd + H**, open **Applications**, and double-click
 **GitHub Desktop - &lt;name&gt;**. Or press **Cmd + Space** and type its name.
