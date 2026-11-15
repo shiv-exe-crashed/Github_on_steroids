@@ -15,7 +15,7 @@ And a guard that **stops wrong-account commits before they happen.**
 ![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![No network calls](https://img.shields.io/badge/network%20calls-0-brightgreen)
 ![shellcheck](https://img.shields.io/badge/shellcheck-0%20warnings-blue)
-![Tests](https://img.shields.io/badge/tests-136%20passing-success)
+![Tests](https://img.shields.io/badge/tests-141%20passing-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 [**⚡ Install in 2 minutes**](#-install-in-2-minutes) ·
@@ -32,7 +32,7 @@ And a guard that **stops wrong-account commits before they happen.**
 
 <div align="center">
 
-| 🧪 **136** automated tests | 🧨 **5** attack tests | 💬 **86** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
+| 🧪 **141** automated tests | 🧨 **5** attack tests | 💬 **88** error messages, each with a next step | 🔗 **15** Git hooks kept working | 📦 **0** dependencies | 🌐 **0** network calls |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 
 </div>
@@ -570,6 +570,12 @@ itself is never changed, and the copy must pass the same GitHub signature
 check. It is made again when GitHub Desktop updates. If a copy can't be made,
 the profile simply opens with GitHub Desktop's normal icon. To skip the copy,
 run `mac/ghdp launch <name> --plain`.
+
+*Where the copies live:* in a hidden folder, `~/Applications/.gh-desktop-profiles/`.
+They must sit inside an "Applications" folder, otherwise GitHub Desktop asks
+"Move GitHub Desktop to the Applications folder?" in every window. **If you ever
+see that question, click Not Now, never "Move and Restart"** (it could replace
+the real app). Removing a profile or uninstalling deletes its copy.
 
 *Good to know:* only the **icon** is different. The name in the menu bar,
 Cmd + Tab and Mission Control still says "GitHub Desktop". macOS reads that

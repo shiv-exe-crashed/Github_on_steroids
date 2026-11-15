@@ -29,7 +29,9 @@ First public release, for macOS.
 - Each profile now has its own Dock icon: opening a profile runs a private,
   signature-checked copy of GitHub Desktop that carries the profile's badge
   (an instant APFS clone, no extra disk space). If the copy cannot be made,
-  the normal app opens. `ghdp launch <name> --plain` skips the copy.
+  the normal app opens. `ghdp launch <name> --plain` skips the copy. The copies
+  live in a hidden `~/Applications/.gh-desktop-profiles/` folder, so GitHub
+  Desktop does not ask to move itself into Applications.
 - One-line install: paste a single line into Terminal. It needs only tools
   every Mac has (no Git), and the files it downloads are not blocked by macOS.
 - Quick first-time setup: if GitHub Desktop is already signed in and your Git
