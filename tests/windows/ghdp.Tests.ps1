@@ -10,6 +10,22 @@ BeforeAll {
       {"name":"office","gitName":"Ada Lovelace","gitEmail":"1+ada-work@users.noreply.github.com"},
       {"name":"personal","gitName":"Ada L","gitEmail":"ada@example.org"}]}'
 
+    # GitHub's Windows test machine runs as an elevated administrator, and Windows
+    # then makes the Administrators group the owner of every file it creates.
+    # A normal, non-elevated account owns its own files, so the tool's "owned by
+    # you" check passes for real users. For the tests, that one case counts as
+    # "you"; any other owner is still refused. The tool itself is not changed.
+    if ($script:OnWindows) {
+        Mock Get-Acl {
+            $acl = Microsoft.PowerShell.Security\Get-Acl @PSBoundParameters
+            $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+            $admins = New-Object System.Security.Principal.SecurityIdentifier([System.Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
+            $isAdmin = (New-Object System.Security.Principal.WindowsPrincipal($identity)).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+            if ($isAdmin -and $acl.GetOwner([System.Security.Principal.SecurityIdentifier]) -eq $admins) { $acl.SetOwner($identity.User) }
+            return $acl
+        }
+    }
+
     function Write-TestConfig([string]$Text) {
         $base = Get-BaseDir
         if (-not (Test-Path -LiteralPath $base)) { [void](New-Item -ItemType Directory -Path $base) }
