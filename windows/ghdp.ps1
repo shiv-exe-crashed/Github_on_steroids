@@ -110,10 +110,16 @@ function Test-GitName([string]$Value) {
 # Names that differ only in capital letters or "-" vs "_" count as the same.
 function Get-NormalName([string]$Value) { return $Value.ToLowerInvariant().Replace('_', '-') }
 
+# True for a full path. Windows PowerShell 5.1 throws on characters such as
+# | < > in a path, so a thrown error simply means "not a usable path".
+function Test-RootedPath([string]$Path) {
+    try { return [System.IO.Path]::IsPathRooted($Path) } catch { return $false }
+}
+
 # A folder rule: "~/..." or a full path, no "..", "." or empty parts.
 function Test-Folder([string]$Value) {
     if ([string]::IsNullOrEmpty($Value) -or $Value.Length -gt 200 -or $Value -match '["%\x00-\x1F]') { return $false }
-    if (-not ($Value -cmatch '\A~[\\/]' -or [System.IO.Path]::IsPathRooted($Value))) { return $false }
+    if (-not ($Value -cmatch '\A~[\\/]' -or (Test-RootedPath $Value))) { return $false }
     $parts = @($Value -split '[\\/]' | Select-Object -Skip 1)
     return (-not ($parts -contains '..' -or $parts -contains '.' -or $parts -contains ''))
 }
@@ -158,7 +164,7 @@ function Get-OwnerFromEmail([string]$Email) {
 # Refuse paths with characters that could change meaning inside a shortcut
 # or a command line (quotes, %VAR% expansion, control characters).
 function Assert-SafePath([string]$Path, [string]$What) {
-    if ([string]::IsNullOrEmpty($Path) -or -not [System.IO.Path]::IsPathRooted($Path) -or $Path -match '["%\x00-\x1F]') {
+    if ([string]::IsNullOrEmpty($Path) -or $Path -match '["%\x00-\x1F]' -or -not (Test-RootedPath $Path)) {
         Fail "The $What path has unusual characters, so this tool stopped to stay safe." 'Please open an issue on the project page.'
     }
 }
@@ -730,7 +736,7 @@ function Test-NativeCurrent {
 }
 
 # Build the two helper programs with the C# compiler that ships with Windows.
-function Build-NativeTools {
+function Initialize-NativeTool {
     $csc = Join-Path -Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) -ChildPath 'csc.exe'
     if (-not (Test-Path -LiteralPath $csc -PathType Leaf)) {
         Fail 'The C# compiler that comes with Windows (.NET Framework 4) was not found.' 'Turn on .NET Framework 4.8 in Windows Features, then run: ghdp.ps1 install'
@@ -762,7 +768,7 @@ function Build-NativeTools {
 function Import-Native {
     if ($null -ne ('GhdpNative' -as [type])) { return }
     Add-Type -AssemblyName System.Drawing
-    if (-not (Test-NativeCurrent)) { Build-NativeTools }
+    if (-not (Test-NativeCurrent)) { Initialize-NativeTool }
     # Only code that is a real file, owned by you and private is loaded.
     Assert-PrivateFile (Get-NativePath)
     [void][System.Reflection.Assembly]::Load([System.IO.File]::ReadAllBytes((Get-NativePath)))
@@ -1091,7 +1097,7 @@ function Write-Guard($ProfileItem) {
 
 # Guard rules of profiles that are no longer in profiles.json are removed, so
 # the guard never points people at a profile that does not exist.
-function Remove-StaleGuards([object[]]$Profiles) {
+function Clear-StaleGuard([object[]]$Profiles) {
     $root = Get-ProfilesRoot
     if (-not (Test-Path -LiteralPath $root -PathType Container)) { return }
     $keep = @($Profiles | ForEach-Object { Get-NormalName $_.Name })
@@ -1123,7 +1129,7 @@ function Get-BadgeColor([int]$Index) {
 
 # Draw the profile's icon again only when its letter, color or the GitHub
 # Desktop version changed.
-function Update-ProfileIcon($ProfileItem, [string]$Exe, [int]$Index) {
+function Sync-ProfileIcon($ProfileItem, [string]$Exe, [int]$Index) {
     Import-Native
     $ico = Get-IconPath $ProfileItem.Name
     $keyFile = "$ico.key"
@@ -1167,7 +1173,7 @@ function Initialize-Profile($ProfileItem, [string]$Exe, [int]$Index = 0, [switch
         if ($LASTEXITCODE -ne 0) { Fail 'Could not write the Git email for this profile.' 'Run: ghdp.ps1 install' }
     }
     Write-Guard $ProfileItem
-    if (-not $NoIcon) { Update-ProfileIcon $ProfileItem $Exe $Index }
+    if (-not $NoIcon) { Sync-ProfileIcon -ProfileItem $ProfileItem -Exe $Exe -Index $Index }
 }
 
 # Copy this script to a fixed private place. Shortcuts run that copy, so a
@@ -1181,7 +1187,7 @@ function Install-Self {
         [System.IO.File]::WriteAllBytes($dst, [System.IO.File]::ReadAllBytes($PSCommandPath))
     }
     Assert-PrivateFile $dst
-    if (-not (Test-NativeCurrent)) { Build-NativeTools }
+    if (-not (Test-NativeCurrent)) { Initialize-NativeTool }
 }
 
 # --------------------------------------------------------------- shortcuts
@@ -1228,7 +1234,7 @@ function Add-ProfileShortcut([string]$ProfileName) {
 }
 
 # Remove shortcuts this tool made for profiles that are no longer in profiles.json.
-function Remove-StaleShortcuts([object[]]$Profiles) {
+function Clear-StaleShortcut([object[]]$Profiles) {
     $dir = Get-ShortcutDir
     if (-not (Test-Path -LiteralPath $dir -PathType Container) -or (Test-ReparsePoint $dir)) { return }
     $keep = @($Profiles | ForEach-Object { Get-NormalName $_.Name })
@@ -1256,7 +1262,7 @@ function Get-ProtocolHandler {
     return [Microsoft.Win32.Registry]::GetValue($script:ProtocolKey, '', $null)
 }
 
-function Test-ProtocolHandlerOurs {
+function Test-ProtocolHandlerOwned {
     $value = Get-ProtocolHandler
     return ($null -ne $value -and $value -ceq (Get-HandlerCommand))
 }
@@ -1264,7 +1270,7 @@ function Test-ProtocolHandlerOurs {
 function Register-ProtocolHandler {
     if (-not $script:OnWindows) { return }
     if (-not (Test-Path -LiteralPath (Get-RunnerPath) -PathType Leaf)) { return }
-    if (Test-ProtocolHandlerOurs) { return }
+    if (Test-ProtocolHandlerOwned) { return }
     [Microsoft.Win32.Registry]::SetValue($script:ProtocolKey, '', (Get-HandlerCommand))
 }
 
@@ -1279,7 +1285,7 @@ function Unregister-ProtocolHandler {
 }
 
 # Running GitHub Desktop main programs that belong to one of our profiles.
-function Get-ProfileProcesses {
+function Get-ProfileProcess {
     $found = New-Object System.Collections.Generic.List[object]
     $root = (Get-ProfilesRoot).TrimEnd('\')
     $query = Get-CimInstance Win32_Process -Filter "Name='GitHubDesktop.exe'" -ErrorAction SilentlyContinue
@@ -1299,7 +1305,7 @@ function Get-ProfileProcesses {
 }
 
 function Find-ProfileProcess([string]$ProfileName) {
-    foreach ($p in (Get-ProfileProcesses)) { if ($p.Name -ieq $ProfileName) { return $p } }
+    foreach ($p in (Get-ProfileProcess)) { if ($p.Name -ieq $ProfileName) { return $p } }
     return $null
 }
 
@@ -1328,7 +1334,7 @@ function Show-ProfileChooser([string[]]$Names) {
         $b.Text = $n
         $b.Width = 260
         $b.Tag = $n
-        $b.Add_Click({ param($s, $e) $script:ChosenProfile = [string]$s.Tag; $form.Close() })
+        $b.Add_Click({ param($s) $script:ChosenProfile = [string]$s.Tag; $form.Close() })
         $panel.Controls.Add($b)
     }
     $form.Controls.Add($panel)
@@ -1343,7 +1349,7 @@ function Invoke-Handle([string]$Url) {
         Fail 'The sign-in link looks unusual, so it was ignored.' 'Start the sign-in again from GitHub Desktop.'
     }
     Assert-ToolFilesPrivate
-    $running = @(Get-ProfileProcesses)
+    $running = @(Get-ProfileProcess)
     if ($running.Count -eq 0) {
         Fail 'No GitHub Desktop profile is open to finish the sign-in.' 'Open your profile from the Start menu, click Sign in again, and finish in the browser.'
     }
@@ -1580,19 +1586,19 @@ function Read-List([string]$Question, [scriptblock]$Test, [string]$Hint) {
 # The guard rules for one profile. Owners are recommended: without folders
 # or owners, the guard can only check the email, so we say so and offer to
 # add owners once more.
-function Read-Rules($Item) {
-    $Item.Folders = Read-List "  Folders used ONLY for this account's repos, comma separated (optional, e.g. ~/work or D:\work)" { param($v) Test-Folder $v } 'Use ~/folder or a full path like D:\work.'
-    $Item.Owners = Read-List '  GitHub owners for this account: your username and organizations, comma separated (recommended; the part after github.com/ in a repo link)' { param($v) Test-Owner $v } 'Use a GitHub username or organization name.'
+function Read-Rule($Item) {
+    $Item.Folders = Read-List -Question "  Folders used ONLY for this account's repos, comma separated (optional, e.g. ~/work or D:\work)" -Test { param($v) Test-Folder $v } -Hint 'Use ~/folder or a full path like D:\work.'
+    $Item.Owners = Read-List -Question '  GitHub owners for this account: your username and organizations, comma separated (recommended; the part after github.com/ in a repo link)' -Test { param($v) Test-Owner $v } -Hint 'Use a GitHub username or organization name.'
     if (@($Item.Folders).Count -eq 0 -and @($Item.Owners).Count -eq 0) {
         Write-Line '  Without folders or owners, the guard can only check the email. It cannot'
         Write-Line '  tell that a repo belongs to another account.'
         if (Read-YesNo '  Add GitHub owners for this account now (recommended)?' 'y') {
-            $Item.Owners = Read-List '  GitHub owners for this account, comma separated' { param($v) Test-Owner $v } 'Use a GitHub username or organization name.'
+            $Item.Owners = Read-List -Question '  GitHub owners for this account, comma separated' -Test { param($v) Test-Owner $v } -Hint 'Use a GitHub username or organization name.'
         }
     }
 }
 
-function New-WizardItem([string]$ProfileName, [string]$GitName, [string]$GitEmail) {
+function Get-WizardItem([string]$ProfileName, [string]$GitName, [string]$GitEmail) {
     return [pscustomobject]@{ Name = $ProfileName; GitName = $GitName; GitEmail = $GitEmail; Folders = [string[]]@(); Owners = [string[]]@(); Repos = [string[]]@() }
 }
 
@@ -1662,12 +1668,12 @@ function Move-ToRecycleBin([string]$Path) {
     }
 }
 
-function Get-ProfileNames([object[]]$Profiles) { return (($Profiles | ForEach-Object { $_.Name }) -join ', ') }
+function Get-ProfileNameList([object[]]$Profiles) { return (($Profiles | ForEach-Object { $_.Name }) -join ', ') }
 
 function Test-Interactive { return ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) }
 
 # Start a profile the same way its shortcut does, without waiting for it.
-function Start-ProfileWindow([string]$ProfileName) {
+function Open-ProfileWindow([string]$ProfileName) {
     $runner = Get-RunnerPath
     if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) { Fail 'The start helper is missing.' 'Run: ghdp.ps1 install' }
     [void][System.Diagnostics.Process]::Start($runner, "launch $ProfileName")
@@ -1681,7 +1687,7 @@ function Show-AfterSetup([string]$ProfileName) {
     Write-Line 'each profile keeps its own taskbar icon, with its own colored badge.'
     if (Test-Interactive) {
         Write-Line ''
-        if (Read-YesNo "Open `"GitHub Desktop - $ProfileName`" now?" 'y') { Start-ProfileWindow $ProfileName }
+        if (Read-YesNo "Open `"GitHub Desktop - $ProfileName`" now?" 'y') { Open-ProfileWindow $ProfileName }
     }
 }
 
@@ -1754,15 +1760,15 @@ function Invoke-Setup {
                 }
             }
             if ($quick) {
-                $item = New-WizardItem $owner $defaultName $defaultEmail
+                $item = Get-WizardItem -ProfileName $owner -GitName $defaultName -GitEmail $defaultEmail
                 $item.Owners = [string[]]@($owner)
                 $items.Add($item)
                 $import = $owner
             } else {
                 $pName = Read-ProfileName -Number 1 -Taken $items.ToArray() -MustBeNew
-                $item = New-WizardItem $pName (Read-GitName $defaultName) (Read-Email $copyEmail)
+                $item = Get-WizardItem -ProfileName $pName -GitName (Read-GitName $defaultName) -GitEmail (Read-Email $copyEmail)
                 if ($item.GitEmail -ceq $spareEmail) { $spareEmail = '' }
-                Read-Rules $item
+                Read-Rule $item
                 $items.Add($item)
                 $import = $pName
             }
@@ -1779,9 +1785,9 @@ function Invoke-Setup {
             $lastName = $defaultName
         }
         $pName = Read-ProfileName -Number ($items.Count + 1) -Taken $items.ToArray()
-        $item = New-WizardItem $pName (Read-GitName $lastName) (Read-Email $spareEmail)
+        $item = Get-WizardItem -ProfileName $pName -GitName (Read-GitName $lastName) -GitEmail (Read-Email $spareEmail)
         $spareEmail = ''
-        Read-Rules $item
+        Read-Rule $item
         $items.Add($item)
     }
 
@@ -1830,7 +1836,7 @@ function Invoke-Setup {
 # over" (the caller then runs the full wizard); the other choices do their
 # work here and return $false.
 function Show-SetupMenu([object[]]$Profiles) {
-    Write-Line "You have $($Profiles.Count) profile(s): $(Get-ProfileNames $Profiles)."
+    Write-Line "You have $($Profiles.Count) profile(s): $(Get-ProfileNameList $Profiles)."
     Write-Line 'What do you want to do?'
     Write-Line '  1) Add a profile'
     Write-Line '  2) Remove a profile'
@@ -1856,11 +1862,11 @@ function Invoke-Add {
     [void](Get-VerifiedDesktop)
     Initialize-PrivateDir (Get-BaseDir)
     $before = [System.IO.File]::ReadAllText((Get-ConfigPath))
-    Write-Line "Add a profile. Your other profiles ($(Get-ProfileNames $profiles)) are not changed."
+    Write-Line "Add a profile. Your other profiles ($(Get-ProfileNameList $profiles)) are not changed."
     $items = Copy-ProfilesToWizard $profiles
     $pName = Read-ProfileName -Number ($items.Count + 1) -Taken $items.ToArray() -MustBeNew
-    $item = New-WizardItem $pName (Read-GitName $items[$items.Count - 1].GitName) (Read-Email '')
-    Read-Rules $item
+    $item = Get-WizardItem -ProfileName $pName -GitName (Read-GitName $items[$items.Count - 1].GitName) -GitEmail (Read-Email '')
+    Read-Rule $item
     Write-Line ''
     Write-Line "New profile: $($item.Name): $($item.GitName) <$($item.GitEmail)>"
     if (@($item.Folders).Count -gt 0) { Write-Line "  folders: $(@($item.Folders) -join ' ')" }
@@ -1890,11 +1896,11 @@ function Invoke-Remove([string]$ProfileName) {
     if ($profiles.Count -le 1) { Fail "`"$($profiles[0].Name)`" is your only profile." 'To remove everything, run: ghdp.ps1 uninstall' }
     $before = [System.IO.File]::ReadAllText((Get-ConfigPath))
     if (-not $ProfileName) {
-        Write-Line "Your profiles: $(Get-ProfileNames $profiles)."
+        Write-Line "Your profiles: $(Get-ProfileNameList $profiles)."
         $ProfileName = Read-Answer 'Name of the profile to remove'
     }
     $match = @($profiles | Where-Object { $_.Name -ceq $ProfileName })
-    if ($match.Count -eq 0) { Fail "There is no profile called `"$ProfileName`"." "Your profiles: $(Get-ProfileNames $profiles)" }
+    if ($match.Count -eq 0) { Fail "There is no profile called `"$ProfileName`"." "Your profiles: $(Get-ProfileNameList $profiles)" }
     $name = $match[0].Name
     $pd = Get-ProfileDir $name
     Write-Line "This removes the shortcut `"GitHub Desktop - $name`" and its guard rules."
@@ -1988,11 +1994,11 @@ function Invoke-Install([switch]$Quiet) {
     Install-Self
     # Old shortcuts and guard rules go first, so a failure later on never
     # leaves a removed profile's rules behind.
-    Remove-StaleShortcuts $profiles
-    Remove-StaleGuards $profiles
+    Clear-StaleShortcut $profiles
+    Clear-StaleGuard $profiles
     for ($i = 0; $i -lt $profiles.Count; $i++) {
         $p = $profiles[$i]
-        Initialize-Profile $p $exe $i
+        Initialize-Profile -ProfileItem $p -Exe $exe -Index $i
         Add-ProfileShortcut $p.Name
         if (-not $Quiet) { Write-Line "Ready: $($p.Name) -> $(Get-ShortcutPath $p.Name)" }
     }
@@ -2044,12 +2050,12 @@ function Invoke-Launch([string]$ProfileName, [switch]$DryRun, [switch]$Plain, [s
     # like a click on the shortcut would, so no console window stays attached.
     if (-not $FromRunner -and -not $Plain) {
         Install-Self
-        Start-ProfileWindow $ProfileName
+        Open-ProfileWindow $ProfileName
         return
     }
 
-    Initialize-Profile $p $exe $index -NoIcon:$Plain
-    Remove-StaleGuards $profiles
+    Initialize-Profile -ProfileItem $p -Exe $exe -Index $index -NoIcon:$Plain
+    Clear-StaleGuard $profiles
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $exe
@@ -2100,7 +2106,7 @@ function Invoke-List {
     } else {
         Write-Line "GitHub Desktop: $exe (SIGNATURE CHECK FAILED)"
     }
-    if (Test-ProtocolHandlerOurs) {
+    if (Test-ProtocolHandlerOwned) {
         Write-Line 'Sign-in link: handled by this tool (replies reach the right profile)'
     } else {
         Write-Line 'Sign-in link: NOT handled by this tool yet (run: ghdp.ps1 install). Sign-in to a profile would fail.'
@@ -2137,7 +2143,7 @@ function Invoke-Uninstall {
         Write-Line 'Nothing changed.'
         return
     }
-    while (@(Get-ProfileProcesses).Count -gt 0) {
+    while (@(Get-ProfileProcess).Count -gt 0) {
         Write-Line 'Please close every GitHub Desktop profile window first (File > Exit in each).'
         [void](Read-Answer 'Then press Enter to continue')
     }

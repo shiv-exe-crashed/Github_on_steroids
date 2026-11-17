@@ -311,8 +311,8 @@ Describe 'Get-OwnerFromEmail' {
 
 Describe 'Expand-Folder' {
     It 'expands ~ and uses forward slashes' {
-        $env:USERPROFILE = 'C:\Users\ada'
-        Expand-Folder '~/work' | Should -Be 'C:/Users/ada/work'
+        $env:USERPROFILE = 'C:\Home\ada'
+        Expand-Folder '~/work' | Should -Be 'C:/Home/ada/work'
         Expand-Folder 'D:\code\work\' | Should -Be 'D:/code/work'
     }
 }
