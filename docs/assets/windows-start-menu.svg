@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" width="900" height="420" role="img" aria-label="The Windows Start menu with a folder called GitHub Desktop Profiles holding one shortcut per account, each with its own colored badge icon.">
+  <rect width="900" height="420" rx="14" fill="#eef2f7"/>
+  <rect x="60" y="30" width="780" height="360" rx="14" fill="#ffffff" stroke="#d5dbe3"/>
+  <text x="90" y="75" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" fill="#1f2937">Start menu</text>
+  <rect x="90" y="92" width="720" height="40" rx="8" fill="#f1f5f9"/>
+  <text x="108" y="118" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#475569">&#128269;  Type: GitHub Desktop</text>
+
+  <text x="90" y="170" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#1f2937">&#128193;  GitHub Desktop Profiles</text>
+
+  <g transform="translate(110,190)">
+    <circle cx="26" cy="26" r="24" fill="#7e3fb8"/>
+    <circle cx="26" cy="26" r="10" fill="#ffffff" opacity=".9"/>
+    <circle cx="44" cy="44" r="13" fill="#2563eb" stroke="#ffffff" stroke-width="2.5"/>
+    <text x="44" y="50" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">P</text>
+    <text x="80" y="32" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#111827">GitHub Desktop - personal</text>
+  </g>
+  <g transform="translate(110,265)">
+    <circle cx="26" cy="26" r="24" fill="#7e3fb8"/>
+    <circle cx="26" cy="26" r="10" fill="#ffffff" opacity=".9"/>
+    <circle cx="44" cy="44" r="13" fill="#16a34a" stroke="#ffffff" stroke-width="2.5"/>
+    <text x="44" y="50" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">W</text>
+    <text x="80" y="32" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#111827">GitHub Desktop - work</text>
+  </g>
+  <text x="90" y="360" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#64748b">One shortcut per account. Click one to open it.</text>
+</svg>

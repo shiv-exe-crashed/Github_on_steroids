@@ -10,6 +10,7 @@ and a guard that stops wrong-account commits before they happen.
 
 [![CI](https://github.com/shiv-exe-crashed/Github_on_steroids/actions/workflows/ci.yml/badge.svg)](https://github.com/shiv-exe-crashed/Github_on_steroids/actions/workflows/ci.yml)
 ![macOS 12+](https://img.shields.io/badge/macOS-12%2B-000000?logo=apple&logoColor=white)
+![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D6?logo=windows&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-147%20passing-success)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
@@ -28,17 +29,114 @@ the other way round). That mistake stays in the history for good.
 <img src="docs/assets/profiles.svg" alt="Two GitHub Desktop windows side by side, one personal and one work, each with its own repository list, and one Dock icon per account" width="90%">
 </div>
 
-- **One Dock icon per account**, each with its own colored badge. The dot shows on that icon while it runs, and clicking it brings its window to the front.
+- **One Dock icon per account** (Mac) or **one taskbar icon per account** (Windows), each with its own colored badge. The dot or highlight shows on that icon while it runs, and clicking it brings its window to the front.
 - **Separate login, repo list and settings** per account. Open several at once.
 - **The right name and email on every commit.** Your own Git settings are never touched.
 - **A guard** that stops wrong-account commits and pushes with a clear message.
 - **The official GitHub Desktop, your original untouched.** Each profile app is a copy of it. Updates are picked up automatically.
 - No dependencies, no network calls from this tool, no admin rights.
 
+<div align="center">
+<img src="docs/assets/windows-taskbar.png" alt="Windows taskbar showing two GitHub Desktop icons: one with a green A badge and one with a blue P badge" width="360">
+<br><sub>Windows: two accounts open at once, two separate taskbar icons (a real screenshot).</sub>
+</div>
+
 ## Install
 
-> **On Windows?** Double-click `install-windows.cmd` and follow
-> [docs/WINDOWS.md](docs/WINDOWS.md). The steps below are for macOS.
+Pick your computer: **[Windows](#windows-step-by-step)** or **[Mac](#mac-step-by-step)**.
+Each one takes about five minutes. You do not need to know how to code.
+
+### Windows: step by step
+
+**Before you start, you need:**
+
+- Windows 10 or Windows 11.
+- [GitHub Desktop](https://desktop.github.com) installed. (Download it, run it, and
+  you are done. You do not have to sign in yet.)
+
+**Step 1. Open PowerShell.**
+Press the **Windows key**, type `PowerShell`, and press **Enter**. A blue window opens.
+This is where you paste things.
+
+**Step 2. Paste this one line and press Enter.**
+Select the whole line, copy it, click inside the blue window, **right-click** (that
+pastes), and press **Enter**:
+
+```powershell
+cd ~\Downloads; Invoke-WebRequest https://github.com/shiv-exe-crashed/Github_on_steroids/archive/refs/heads/main.zip -OutFile Github_on_steroids.zip; Expand-Archive -Force Github_on_steroids.zip .; powershell -NoProfile -ExecutionPolicy Bypass -File .\Github_on_steroids-main\windows\ghdp.ps1 setup
+```
+
+What the line does: it downloads this project into your **Downloads** folder,
+unzips it, and starts the setup. It never asks for a password.
+
+<details>
+<summary>Other way: no typing, just double-click</summary>
+
+1. On the GitHub page of this project, click the green **Code** button, then **Download ZIP**.
+2. Right-click the ZIP, choose **Extract All**, and open the new folder.
+3. Double-click **`install-windows.cmd`**.
+4. If Windows says **"Windows protected your PC"**, click **More info**, then **Run anyway**.
+   (Windows says this about every new program from the internet. You can read all the code first.)
+
+</details>
+
+<div align="center">
+<img src="docs/assets/windows-setup-demo.svg" alt="The Windows setup asks a few questions and makes one Start menu shortcut per account" width="90%">
+</div>
+
+**Step 3. Answer the questions.**
+Press **Enter** to accept the answer shown in `[brackets]`. Here is what to type
+(use your own names and emails):
+
+| The setup asks | You type |
+|---|---|
+| Name for profile 1 | `personal` |
+| Name on commits | your name |
+| Email on commits | your GitHub "noreply" email (see the tip below) |
+| Folders | just press **Enter** to skip |
+| GitHub owners | your GitHub username |
+| Add another profile? | `y`, then for your work account: `work`, your name, `you@company.com`, folders (skip), `your-company` |
+| Add another profile? (again) | `n` |
+| Create these profiles? | `y` |
+| Open "GitHub Desktop - personal" now? | `y` |
+
+If GitHub Desktop was already signed in on this PC, the setup may first ask whether
+to copy that account into your first profile. Answer `y` if you want that account to
+stay signed in, otherwise `n`.
+
+**Tip, which email?** Use your GitHub **noreply** email, so your real address never
+shows in public commits. On github.com open **Settings, Emails**, tick **Keep my
+email addresses private**, and copy the address that ends in `@users.noreply.github.com`.
+
+Every question is explained in [docs/USAGE.md](docs/USAGE.md).
+
+**Step 4. Open a profile and sign in (once per profile).**
+Your shortcuts are in the **Start menu**, in a folder called **GitHub Desktop Profiles**.
+Press the Windows key and type `GitHub Desktop - personal`.
+
+<div align="center">
+<img src="docs/assets/windows-start-menu.svg" alt="The Start menu folder GitHub Desktop Profiles with one shortcut per account" width="80%">
+</div>
+
+1. In your web browser, make sure you are logged in to the **right** GitHub account.
+2. Close every other GitHub Desktop window.
+3. Open the shortcut, click **Sign in to GitHub.com**, then **Continue With Browser**, then **Authorize**.
+4. On **Configure Git** choose **Configure manually**, then click **Finish**.
+5. Open **File, Options, Accounts** and check it shows the right account.
+6. Open **File, Options, Git** and keep **Load Git hook environment variables from shell** **unticked**.
+
+Now do Step 4 again for your other account (use its own shortcut and its own
+GitHub login in the browser).
+
+**Step 5 (nice to have). Pin each one to the taskbar.**
+With a profile open, right-click its icon in the taskbar and choose **Pin to taskbar**.
+Each account keeps its own icon with its own colored badge and letter, and
+clicking it opens that account.
+
+**If something goes wrong:** see [Troubleshooting](#troubleshooting). More about Windows
+(what is installed, every command): [docs/WINDOWS.md](docs/WINDOWS.md).
+
+### Mac: step by step
 
 You need macOS 12 or newer and [GitHub Desktop](https://desktop.github.com) in
 your Applications folder. Nothing else.
@@ -76,7 +174,7 @@ bash Github_on_steroids/install-mac.command
 
 </details>
 
-### What to answer
+### Mac: what to answer
 
 Example for a personal and a work account (use your own names and emails):
 
@@ -103,7 +201,7 @@ my email addresses private**, and copy the address that ends in
 
 Every question is explained in [docs/USAGE.md](docs/USAGE.md).
 
-### Open a profile and sign in
+### Mac: open a profile and sign in
 
 <div align="center">
 <img src="docs/assets/launchers.svg" alt="The Applications folder in your home folder with one launcher per account" width="80%">
@@ -128,8 +226,8 @@ To add another account later, run the install line again and press **Return**
 
 ## The wrong-account guard
 
-Before every commit, merge and push, a small guard checks that you are in the
-right profile. Open a work repo in your personal profile by mistake and you see this:
+Works the same on Mac and Windows. Before every commit, merge and push, a small
+guard checks that you are in the right profile. Open a work repo in your personal profile by mistake and you see this:
 
 <div align="center">
 <img src="docs/assets/guard-demo.svg" alt="Commit failed: the guard stopped a work repo in the personal profile and names the work profile" width="90%">
@@ -151,6 +249,12 @@ just that one repo for the profile that should use it:
 
 ```bash
 mac/ghdp allow work some-owner/shared-repo
+```
+
+On Windows (PowerShell, from the project folder):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\ghdp.ps1 allow work some-owner/shared-repo
 ```
 
 **The guard is a safety net, not a lock.** GitHub Desktop has a setting,
@@ -250,7 +354,13 @@ usual login page appears.
 
 ## Uninstall
 
-Double-click **`uninstall-mac.command`**. It asks before doing anything, removes
+**Windows:** double-click **`uninstall-windows.cmd`**. It asks before doing anything.
+It removes the Start menu shortcuts and the tool, and gives the sign-in link back to
+GitHub Desktop. It asks whether to move your profile data to the Recycle Bin. Your
+normal GitHub Desktop, your code and your GitHub accounts are never touched. Saved
+logins stay in Windows Credential Manager: to remove one, sign out inside that profile first.
+
+**Mac:** double-click **`uninstall-mac.command`**. It asks before doing anything, removes
 the profile apps and the tool, and asks whether to move your
 profile data to the Trash. Your normal GitHub Desktop, your code and your GitHub
 accounts are never touched. Saved logins stay in your Keychain: to remove one,
@@ -271,6 +381,19 @@ needs them any more.
 | *Commit failed: gh-desktop-profiles stopped this* | The guard doing its job. Open the repo in the profile it names. |
 | A profile shows another account's repos | Right-click them, **Remove** (files stay on disk), then add them in the right profile. |
 | Anything else | `mac/ghdp list` runs a health check. Every error says what to do next. |
+
+**On Windows:**
+
+| You see | Do this |
+|---|---|
+| *"Windows protected your PC"* | Click **More info**, then **Run anyway**. Or use the one-line install in Step 2. |
+| *"running scripts is disabled on this system"* | Use the exact command from Step 2. It already contains `-ExecutionPolicy Bypass`. |
+| *GitHub Desktop is not installed for this Windows user* | Install it from [desktop.github.com](https://desktop.github.com), then run setup again. |
+| Sign-in keeps waiting, or the second account will not sign in | Close every other GitHub Desktop window, click the profile you are signing in to (so it is the one you used last), then **Sign in** again. Run `windows\ghdp.ps1 list`: it must say *Sign-in link: handled by this tool*. If not, run `windows\ghdp.ps1 install`. |
+| Both accounts share one taskbar icon | Close both windows and open them again from their Start menu shortcuts. |
+| *Commit failed: gh-desktop-profiles stopped this* | The guard doing its job. Open the repo in the profile it names. |
+| *The setting NODE_OPTIONS is turned on* | Remove `NODE_OPTIONS` (or `ELECTRON_RUN_AS_NODE`) in **Settings, System, About, Advanced system settings, Environment Variables**, then try again. |
+| Anything else | Run `powershell -ExecutionPolicy Bypass -File windows\ghdp.ps1 list`. Every error says what to do next. |
 
 ## Contributing
 

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 640" width="900" height="640" role="img" aria-label="Animated demo of the Windows setup: you double-click install-windows.cmd, give each account a name, commit name, email and GitHub owner, confirm, and the Start menu shortcuts are made.">
+  <style>
+    .mono { font-family: Consolas, "Cascadia Mono", "Liberation Mono", Menlo, monospace; font-size: 17px; white-space: pre; }
+    .t { fill: #e6edf3; } .d { fill: #9aa4af; } .a { fill: #ffd866; font-weight: 700; }
+    .ok { fill: #3fb950; font-weight: 700; } .h { fill: #ffffff; font-weight: 700; }
+    .l { opacity: 0; animation: show .3s ease forwards; }
+    @keyframes show { to { opacity: 1; } }
+    .cursor { animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+  </style>
+  <rect width="900" height="640" rx="10" fill="#012456"/>
+  <rect width="900" height="40" rx="10" fill="#1f1f1f"/>
+  <rect y="24" width="900" height="16" fill="#1f1f1f"/>
+  <text x="18" y="26" class="mono t" font-size="14">Windows PowerShell</text>
+  <text x="808" y="27" class="mono d" font-size="16">&#8212;  &#9744;  &#10005;</text>
+
+  <g class="mono" xml:space="preserve">
+    <text x="28" y="78" class="l h" style="animation-delay:.2s">GitHub Desktop Profiles setup</text>
+    <text x="28" y="106" class="l" style="animation-delay:.6s"><tspan class="t">GitHub Desktop: found, and signed by GitHub. </tspan><tspan class="ok">&#10003;</tspan></text>
+    <text x="28" y="142" class="l" style="animation-delay:1.2s"><tspan class="d">Name for profile 1: </tspan><tspan class="a">personal</tspan></text>
+    <text x="50" y="170" class="l" style="animation-delay:1.7s"><tspan class="d">Name on commits: </tspan><tspan class="a">Your Name</tspan></text>
+    <text x="50" y="198" class="l" style="animation-delay:2.2s"><tspan class="d">Email on commits: </tspan><tspan class="a">12345+you@users.noreply.github.com</tspan></text>
+    <text x="50" y="226" class="l" style="animation-delay:2.7s"><tspan class="d">Folders (optional): </tspan><tspan class="a">&#8629;</tspan></text>
+    <text x="50" y="254" class="l" style="animation-delay:3.2s"><tspan class="d">GitHub owners: </tspan><tspan class="a">your-username</tspan></text>
+    <text x="28" y="290" class="l" style="animation-delay:3.8s"><tspan class="d">Add another profile (another GitHub account)? (y/n) [y]: </tspan><tspan class="a">&#8629;</tspan></text>
+    <text x="28" y="326" class="l" style="animation-delay:4.4s"><tspan class="d">Name for profile 2: </tspan><tspan class="a">work</tspan></text>
+    <text x="50" y="354" class="l" style="animation-delay:4.9s"><tspan class="d">Email on commits: </tspan><tspan class="a">you@company.com</tspan></text>
+    <text x="50" y="382" class="l" style="animation-delay:5.4s"><tspan class="d">GitHub owners: </tspan><tspan class="a">your-company</tspan></text>
+    <text x="28" y="418" class="l" style="animation-delay:6.0s"><tspan class="d">Add another profile? (y/n) [n]: </tspan><tspan class="a">&#8629;</tspan></text>
+    <text x="28" y="454" class="l" style="animation-delay:6.6s"><tspan class="d">Create these profiles? (y/n) [y]: </tspan><tspan class="a">&#8629;</tspan></text>
+    <text x="28" y="490" class="l" style="animation-delay:7.3s"><tspan class="ok">&#10003; Ready: </tspan><tspan class="t">personal  &#8594;  Start menu &#8250; GitHub Desktop - personal</tspan></text>
+    <text x="28" y="518" class="l" style="animation-delay:7.7s"><tspan class="ok">&#10003; Ready: </tspan><tspan class="t">work      &#8594;  Start menu &#8250; GitHub Desktop - work</tspan></text>
+    <text x="28" y="554" class="l" style="animation-delay:8.3s"><tspan class="d">Open "GitHub Desktop - personal" now? (y/n) [y]: </tspan><tspan class="a">&#8629;</tspan></text>
+    <text x="28" y="590" class="l" style="animation-delay:9.0s"><tspan class="h">Done.</tspan><tspan class="t cursor"> &#9608;</tspan></text>
+  </g>
+</svg>
