@@ -289,3 +289,67 @@ Describe 'Guard rules in profiles.json (folders and owners)' {
         { Read-Config } | Should -Throw -ExpectedMessage "*$Expect*"
     }
 }
+
+Describe 'Test-Repo' {
+    It 'accepts <_>' -ForEach @('owner/repo', 'My-Org/some.repo_1') {
+        Test-Repo $_ | Should -BeTrue
+    }
+    It 'refuses <_>' -ForEach @('owner', 'owner/', 'owner/repo.git', 'owner/..', '-x/repo', 'a/b/c', 'a b/c') {
+        Test-Repo $_ | Should -BeFalse
+    }
+}
+
+Describe 'Get-OwnerFromEmail' {
+    It 'reads the account from a noreply email' {
+        Get-OwnerFromEmail '123+octo-cat@users.noreply.github.com' | Should -Be 'octo-cat'
+        Get-OwnerFromEmail 'octo-cat@users.noreply.github.com' | Should -Be 'octo-cat'
+    }
+    It 'returns nothing for another email' {
+        Get-OwnerFromEmail 'a@example.org' | Should -Be ''
+    }
+}
+
+Describe 'Expand-Folder' {
+    It 'expands ~ and uses forward slashes' {
+        $env:USERPROFILE = 'C:\Users\ada'
+        Expand-Folder '~/work' | Should -Be 'C:/Users/ada/work'
+        Expand-Folder 'D:\code\work\' | Should -Be 'D:/code/work'
+    }
+}
+
+Describe 'Read-Config rules' {
+    BeforeEach {
+        $env:LOCALAPPDATA = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString())
+        [void](New-Item -ItemType Directory -Path $env:LOCALAPPDATA)
+    }
+    It 'reads folders, owners and repos' {
+        Write-TestConfig '{"version":1,"profiles":[{"name":"w","gitName":"A","gitEmail":"a@b.co","folders":["~/work"],"owners":["acme"],"repos":["x/y"]}]}'
+        $p = (Read-Config)[0]
+        $p.Folders | Should -Be @('~/work')
+        $p.Owners | Should -Be @('acme')
+        $p.Repos | Should -Be @('x/y')
+    }
+    It 'refuses a bad repo' {
+        Write-TestConfig '{"version":1,"profiles":[{"name":"w","gitName":"A","gitEmail":"a@b.co","repos":["nope"]}]}'
+        { Read-Config } | Should -Throw -ExpectedMessage '*"repos" item*'
+    }
+}
+
+Describe 'Guard' {
+    It 'writes the hooks with Unix line endings and the rules file' {
+        $env:LOCALAPPDATA = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString())
+        [void](New-Item -ItemType Directory -Path $env:LOCALAPPDATA)
+        Initialize-PrivateDir (Get-BaseDir)
+        Initialize-PrivateDir (Get-ProfilesRoot)
+        Initialize-PrivateDir (Get-ProfileDir 'w')
+        $p = [pscustomobject]@{ Name = 'w'; GitName = 'A'; GitEmail = 'a@b.co'; Folders = @('~/work'); Owners = @('Acme'); Repos = @('X/Y') }
+        Write-Guard $p
+        $hook = [System.IO.File]::ReadAllText((Join-Path -Path (Get-HooksDir 'w') -ChildPath 'pre-commit'))
+        $hook | Should -Not -Match "`r"
+        $hook | Should -Match '^#!/bin/sh'
+        $rules = [System.IO.File]::ReadAllText((Get-GuardPath 'w'))
+        $rules | Should -Match 'owner=acme'
+        $rules | Should -Match 'repo=x/y'
+        $rules | Should -Match 'email=a@b.co'
+    }
+}

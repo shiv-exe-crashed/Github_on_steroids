@@ -37,6 +37,9 @@ the other way round). That mistake stays in the history for good.
 
 ## Install
 
+> **On Windows?** Double-click `install-windows.cmd` and follow
+> [docs/WINDOWS.md](docs/WINDOWS.md). The steps below are for macOS.
+
 You need macOS 12 or newer and [GitHub Desktop](https://desktop.github.com) in
 your Applications folder. Nothing else.
 
