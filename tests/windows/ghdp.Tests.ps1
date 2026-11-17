@@ -17,7 +17,9 @@ BeforeAll {
     # "you"; any other owner is still refused. The tool itself is not changed.
     if ($script:OnWindows) {
         Mock Get-Acl {
-            $acl = Microsoft.PowerShell.Security\Get-Acl @PSBoundParameters
+            # The command object itself, not its name: a call by name would hit this mock again.
+            $real = Get-Command -Name Get-Acl -CommandType Cmdlet
+            $acl = & $real @PSBoundParameters
             $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
             $admins = New-Object System.Security.Principal.SecurityIdentifier([System.Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
             $isAdmin = (New-Object System.Security.Principal.WindowsPrincipal($identity)).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
