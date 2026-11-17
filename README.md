@@ -28,11 +28,11 @@ the other way round). That mistake stays in the history for good.
 <img src="docs/assets/profiles.svg" alt="Two GitHub Desktop windows side by side, one personal and one work, each with its own repository list, and one Dock icon per account" width="90%">
 </div>
 
-- **One launcher per account**, each with its own colored badge in the Dock.
+- **One Dock icon per account**, each with its own colored badge. The dot shows on that icon while it runs, and clicking it brings its window to the front.
 - **Separate login, repo list and settings** per account. Open several at once.
 - **The right name and email on every commit.** Your own Git settings are never touched.
 - **A guard** that stops wrong-account commits and pushes with a clear message.
-- **The official GitHub Desktop.** Nothing inside the app is changed, so updates keep working.
+- **The official GitHub Desktop, your original untouched.** Each profile app is a copy of it. Updates are picked up automatically.
 - No dependencies, no network calls from this tool, no admin rights.
 
 ## Install
@@ -190,11 +190,14 @@ Found a problem? See [SECURITY.md](SECURITY.md).
 <details>
 <summary>Does it modify GitHub Desktop?</summary>
 
-No. It starts the official, signed app with a separate data folder per
-profile. For the Dock icon it opens a private copy of GitHub Desktop (instant
-and free on disk, because Macs clone files) in a hidden folder,
-`~/Applications/.gh-desktop-profiles/`. If a copy can't be made, the normal
-app opens. Skip the copy with `mac/ghdp launch <name> --plain`.
+Your installed GitHub Desktop is never changed. Each profile app
+(`~/Applications/GitHub Desktop - <name>.app`) is a copy of it (instant and
+free on disk, because Macs clone files) with its own icon and name, signed on
+your Mac, so the Dock shows one icon per profile and the dot lands on it. When
+GitHub Desktop updates, the profile apps are made again on their next open.
+The first time a profile app uses your saved login, macOS may ask for
+permission to use the Keychain item: choose **Always Allow**. To open the normal app with a profile
+instead, use `mac/ghdp launch <name> --plain`.
 </details>
 
 <details>
@@ -211,7 +214,7 @@ theme (Light or Dark) in **Settings, Appearance**.
 <summary>GitHub Desktop asks "Move GitHub Desktop to the Applications folder?"</summary>
 
 Click **Not Now**, never **Move and Restart** (it could replace the real app).
-The private copies live inside an Applications folder to avoid this question,
+The profile apps live inside an Applications folder to avoid this question,
 so tell us if you still see it.
 </details>
 
@@ -245,7 +248,7 @@ usual login page appears.
 ## Uninstall
 
 Double-click **`uninstall-mac.command`**. It asks before doing anything, removes
-the launchers, the tool and the private copies, and asks whether to move your
+the profile apps and the tool, and asks whether to move your
 profile data to the Trash. Your normal GitHub Desktop, your code and your GitHub
 accounts are never touched. Saved logins stay in your Keychain: to remove one,
 sign out inside that profile first.

@@ -770,8 +770,14 @@ ZERO="$(printf '0%.0s' {1..40})"
   /bin/mkdir -p "$HOME/elsewhere"
   /bin/mv "$(launcher_path office)/Contents/MacOS" "$HOME/elsewhere/MacOS"
   /bin/ln -s "$HOME/elsewhere/MacOS" "$(launcher_path office)/Contents/MacOS"
+  local before
+  before="$(cd "$HOME/elsewhere" && find . -type f -exec shasum {} + | sort)"
   run main install
-  refused_with "is a link"
+  [ "$status" -eq 0 ]
+  # The link is thrown away with the old app: nothing is written through it.
+  [ ! -L "$(launcher_path office)/Contents/MacOS" ]
+  [ "$before" = "$(cd "$HOME/elsewhere" && find . -type f -exec shasum {} + | sort)" ]
+  launcher_signature_ok "$(launcher_path office)"
 }
 
 @test "attack: a remote URL with a newline cannot fool the owner check" {
@@ -1677,194 +1683,183 @@ write_global_git() { printf '[user]\n\tname = %s\n\temail = %s\n' "$1" "$2" >"$H
   [ "$status" -eq 0 ] && [ ! -e "$HOME/launched" ] && [ ! -e "$HOME/revealed" ] || false
 }
 
-# --- experimental: a profile's own Dock icon (a private copy of GitHub Desktop)
+# --- a profile's app: the Dock icon you pin IS the app that runs
 
-icon_setup() {
+app_setup() {
   need_app
   write_config "$GOOD"
   load_config
   APP="$(verified_app)"
-  PD="$(profile_dir office)"
-  CD="$(app_copy_dir office)"
-  ensure_private_dir "$(base_dir)/profiles"
+  L="$(launcher_path office)"
+  ensure_private_dir "$(base_dir)/bin"
+  install_self
 }
 
-@test "launch --own-icon --dry-run names the copy's place and makes nothing" {
-  need_app
-  write_config "$GOOD"
-  run main launch office --own-icon --dry-run
-  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
-  [[ $output == *"$(profile_dir office)/app/GitHub Desktop.app"* ]]
-  [[ $output == *"private copy"* ]]
-  [ ! -e "$(profile_dir office)/app" ]
+@test "the profile app is a signed clone of GitHub Desktop with its own id, name, icon and start file" {
+  app_setup
+  make_launcher office "$APP" 0
+  launcher_signature_ok "$L"
+  launcher_fresh office "$APP" 0
+  [ "$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$L/Contents/Info.plist")" = "io.github.gh-desktop-profiles.office" ]
+  [ "$(/usr/bin/plutil -extract CFBundleExecutable raw -o - "$L/Contents/Info.plist")" = "launch" ]
+  [ "$(/usr/bin/plutil -extract CFBundleDisplayName raw -o - "$L/Contents/Info.plist")" = "GitHub Desktop - office" ]
+  # GitHub's own icon name would override our badge icon, so it is removed.
+  run /usr/bin/plutil -extract CFBundleIconName raw -o - "$L/Contents/Info.plist"
+  [ "$status" -ne 0 ]
+  [ "$(/usr/bin/plutil -extract CFBundleIconFile raw -o - "$L/Contents/Info.plist")" = "AppIcon" ]
+  # Not hidden from the Dock: no LSUIElement.
+  run /usr/bin/plutil -extract LSUIElement raw -o - "$L/Contents/Info.plist"
+  [ "$status" -ne 0 ]
+  # Same program as the original (only the signature stored in the file differs).
+  [ -x "$L/Contents/MacOS/GitHub Desktop" ]
+  [ "$(/usr/bin/file -b "$L/Contents/MacOS/GitHub Desktop")" = "$(/usr/bin/file -b "$APP/Contents/MacOS/GitHub Desktop")" ]
+  [ "$(stat -f %Sp "$L/Contents/MacOS/launch")" = "-rwx------" ]
 }
 
-@test "the private copy is an exact, signed clone with its own icon" {
-  icon_setup
-  local copy
-  copy="$(make_profile_app 0 "$APP")"
-  [ "$copy" = "$CD/GitHub Desktop.app" ]
-  [[ $copy == */Applications/* ]]
-  copy_signature_ok "$copy"
-  [ -f "$copy/Icon"$'\r' ]
-  # Same program as the original: its main file is identical.
-  cmp "$APP/Contents/MacOS/GitHub Desktop" "$copy/Contents/MacOS/GitHub Desktop"
-  # The original was not touched (still passes the strict check, no icon file).
+@test "making the profile app never changes the real GitHub Desktop" {
+  app_setup
+  make_launcher office "$APP" 0
   app_signature_ok "$APP"
   [ ! -e "$APP/Icon"$'\r' ]
-  [ "$(stat -f %Lp "$CD")" = "700" ]
+  [ "$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$APP/Contents/Info.plist")" = "com.github.GitHubClient" ]
 }
 
-@test "a clean copy is kept and a changed one is made again" {
-  icon_setup
-  make_profile_app 0 "$APP" >/dev/null
-  echo marker >"$CD/marker"
-  make_profile_app 0 "$APP" >/dev/null
-  [ -f "$CD/marker" ]
-  # Change one file inside the copy: it must be replaced by a fresh clone.
-  echo x >>"$CD/GitHub Desktop.app/Contents/Resources/electron.icns"
-  run copy_signature_ok "$CD/GitHub Desktop.app"
+@test "a current profile app is kept, and a changed one is made again" {
+  app_setup
+  make_launcher office "$APP" 0
+  echo marker >"$L/Contents/Resources/marker"
+  # An added file breaks the seal, so it is made again (and the marker goes).
+  run launcher_signature_ok "$L"
   [ "$status" -ne 0 ]
-  make_profile_app 0 "$APP" >/dev/null
-  copy_signature_ok "$CD/GitHub Desktop.app"
-  cmp "$APP/Contents/Resources/electron.icns" "$CD/GitHub Desktop.app/Contents/Resources/electron.icns"
+  make_launcher office "$APP" 0
+  [ ! -e "$L/Contents/Resources/marker" ]
+  launcher_fresh office "$APP" 0
+  # A clean app is left alone.
+  /usr/bin/touch -t 202001010000 "$L/Contents/Info.plist"
+  make_launcher office "$APP" 0
+  [ "$(stat -f %Sm -t %Y "$L/Contents/Info.plist")" = "2020" ]
 }
 
-@test "a copy of an older GitHub Desktop is made again" {
-  icon_setup
-  make_profile_app 0 "$APP" >/dev/null
-  echo marker >"$CD/GitHub Desktop.app/Contents/marker"
-  # Pretend GitHub Desktop updated: the original now reports a newer version.
+@test "a profile app of an older GitHub Desktop is made again" {
+  app_setup
+  make_launcher office "$APP" 0
+  echo x >"$L/Contents/Resources/marker"
   app_version() { case $1 in "$APP") printf 'new' ;; *) printf 'old' ;; esac; }
-  make_profile_app 0 "$APP" >/dev/null
-  [ ! -e "$CD/GitHub Desktop.app/Contents/marker" ]
-}
-
-@test "the icon is remembered by letter and colour, and a fake app in the copy's place is replaced" {
-  icon_setup
-  make_profile_app 0 "$APP" >/dev/null
-  [ "$(cat "$CD/icon.key")" = "O-37,99,235" ]
-  # An unsigned fake app in the copy's place is thrown away and replaced.
-  /bin/rm -rf "$CD/GitHub Desktop.app"
-  mkdir -p "$CD/GitHub Desktop.app/Contents/MacOS"
-  printf '#!/bin/sh\necho fake\n' >"$CD/GitHub Desktop.app/Contents/MacOS/GitHub Desktop"
-  make_profile_app 0 "$APP" >/dev/null
-  copy_signature_ok "$CD/GitHub Desktop.app"
-  cmp "$APP/Contents/MacOS/GitHub Desktop" "$CD/GitHub Desktop.app/Contents/MacOS/GitHub Desktop"
-}
-
-@test "attack: a link in the copy's place never touches the real app" {
-  icon_setup
-  mkdir -p "$CD"
-  /bin/ln -s "$APP" "$CD/GitHub Desktop.app"
-  make_profile_app 0 "$APP" >/dev/null
-  [ ! -L "$CD/GitHub Desktop.app" ] && [ -d "$CD/GitHub Desktop.app" ]
-  app_signature_ok "$APP"
-  [ ! -e "$APP/Icon"$'\r' ]
-}
-
-@test "attack: a linked app folder is refused" {
-  icon_setup
-  mkdir -p "$HOME/Applications" "$HOME/elsewhere"
-  /bin/ln -s "$HOME/elsewhere" "$HOME/Applications/.gh-desktop-profiles"
-  run make_profile_app 0 "$APP"
+  run launcher_fresh office "$APP" 0
   [ "$status" -ne 0 ]
-  [ -z "$(ls -A "$HOME/elsewhere")" ]
 }
 
-@test "the copy lives inside an Applications folder, so GitHub Desktop does not ask to move itself" {
-  icon_setup
-  local copy
-  copy="$(make_profile_app 0 "$APP")"
-  [[ $copy == "$HOME/Applications/.gh-desktop-profiles/office/GitHub Desktop.app" ]]
-  # GitHub Desktop (Electron) treats any path with an "Applications" folder as fine.
-  [[ "/$copy/" == */Applications/* ]]
-  [ ! -e "$PD/app" ]
+@test "the icon letter and color are remembered, and a changed start file is noticed" {
+  app_setup
+  make_launcher office "$APP" 0
+  [ "$(/usr/bin/plutil -extract GHDPIconKey raw -o - "$L/Contents/Info.plist")" = "O-37,99,235" ]
+  # Same profile in another list position: another color, so made again.
+  run launcher_fresh office "$APP" 1
+  [ "$status" -ne 0 ]
+  # A start file that does something else is never trusted.
+  /bin/chmod 700 "$L/Contents/MacOS/launch"
+  printf '#!/bin/bash\necho evil\n' >"$L/Contents/MacOS/launch"
+  run launcher_fresh office "$APP" 0
+  [ "$status" -ne 0 ]
 }
 
-@test "an older copy inside the profile folder is removed" {
-  icon_setup
-  mkdir -p "$PD/app/GitHub Desktop.app/Contents"
-  echo old >"$PD/app/GitHub Desktop.app/Contents/old"
-  make_profile_app 0 "$APP" >/dev/null
-  [ ! -e "$PD/app" ]
+@test "attack: a fake app in the profile app's place is replaced, and a link is refused" {
+  app_setup
+  mkdir -p "$L/Contents/MacOS"
+  printf '#!/bin/sh\necho fake\n' >"$L/Contents/MacOS/GitHub Desktop"
+  /usr/bin/plutil -create xml1 "$L/Contents/Info.plist"
+  /usr/bin/plutil -insert CFBundleIdentifier -string "io.github.gh-desktop-profiles.office" "$L/Contents/Info.plist"
+  make_launcher office "$APP" 0
+  launcher_fresh office "$APP" 0
+  [ "$(head -c 2 "$L/Contents/MacOS/GitHub Desktop")" != "#!" ] # the fake script is gone
+  # A link in the app's place is never followed.
+  /bin/rm -rf "$L"
+  /bin/ln -s "$APP" "$L"
+  run make_launcher office "$APP" 0
+  refused_with "was not made by this tool"
+  app_signature_ok "$APP"
 }
 
-@test "the copy is refused when Applications can be changed by other people" {
-  icon_setup
+@test "the profile app is refused when Applications can be changed by other people" {
+  app_setup
   mkdir -p "$HOME/Applications"
   /bin/chmod 777 "$HOME/Applications"
-  run make_profile_app 0 "$APP"
+  run make_launcher office "$APP" 0
   /bin/chmod 755 "$HOME/Applications"
   refused_with "can be changed by other users"
-  [ ! -e "$HOME/Applications/.gh-desktop-profiles" ]
+  [ ! -e "$L" ]
 }
 
-@test "removing a profile or uninstalling removes its copy of GitHub Desktop" {
+@test "a failed build leaves no half-made app and no build folder behind" {
+  app_setup
+  # shellcheck disable=SC2329 # called by make_launcher
+  patch_info_plist() { return 1; }
+  run make_launcher office "$APP" 0
+  refused_with "Could not finish the app"
+  [ ! -e "$L" ]
+  local leftover=("$HOME/Applications"/.ghdp-build.*)
+  [ ! -e "${leftover[0]}" ]
+}
+
+@test "the old hidden private copies are removed on install and uninstall, links never followed" {
   need_app
   write_config "$GOOD"
   main install >/dev/null
-  load_config
-  local real
-  real="$(verified_app)"
-  make_profile_app 0 "$real" >/dev/null
-  make_profile_app 1 "$real" >/dev/null
-  [ -d "$(app_copy_dir office)" ] && [ -d "$(app_copy_dir personal)" ]
-  main remove personal <<<$'y\nn\n' >/dev/null
-  [ ! -e "$(app_copy_dir personal)" ] && [ -d "$(app_copy_dir office)" ]
+  mkdir -p "$HOME/elsewhere" "$HOME/Applications/.gh-desktop-profiles/office"
+  echo keep >"$HOME/elsewhere/data.txt"
+  /bin/ln -s "$HOME/elsewhere" "$HOME/Applications/.gh-desktop-profiles/ghost"
+  main install >/dev/null
+  [ ! -e "$HOME/Applications/.gh-desktop-profiles" ]
+  [ "$(cat "$HOME/elsewhere/data.txt")" = "keep" ]
+  mkdir -p "$HOME/Applications/.gh-desktop-profiles/office"
   main uninstall <<<$'y\nn\n' >/dev/null
   [ ! -e "$HOME/Applications/.gh-desktop-profiles" ]
 }
 
-@test "attack: a linked copy folder is never followed when cleaning up" {
+@test "attack: a linked old-copies folder is never followed" {
   need_app
   write_config "$GOOD"
-  main install >/dev/null
-  mkdir -p "$HOME/elsewhere" "$HOME/Applications/.gh-desktop-profiles"
+  mkdir -p "$HOME/elsewhere" "$HOME/Applications"
   echo keep >"$HOME/elsewhere/data.txt"
-  /bin/ln -s "$HOME/elsewhere" "$HOME/Applications/.gh-desktop-profiles/ghost"
+  /bin/ln -s "$HOME/elsewhere" "$HOME/Applications/.gh-desktop-profiles"
   main install >/dev/null
   [ "$(cat "$HOME/elsewhere/data.txt")" = "keep" ]
 }
 
-# --- the own Dock icon is the default, with a safe fallback
+# --- launching: the app you click is the app that runs
 
-@test "launch uses the profile's own app copy by default, and --plain opens the normal app" {
+@test "launch (default) names the profile app's own program and the fixed settings" {
   need_app
   write_config "$GOOD"
   run main launch office --dry-run
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
-  [[ $output == *"$(profile_dir office)/app/GitHub Desktop.app"* ]]
+  [[ $output == *"$(launcher_path office)/Contents/MacOS/GitHub Desktop"* ]]
+  [[ $output == *"--user-data-dir=$(data_dir office)"* ]]
+  [[ $output == *"GIT_AUTHOR_EMAIL=1+ada-work@users.noreply.github.com"* ]]
+  [ ! -e "$(launcher_path office)" ]
+}
+
+@test "launch --plain opens the normal GitHub Desktop and --own-icon is still accepted" {
+  need_app
+  write_config "$GOOD"
   run main launch office --plain --dry-run
   [ "$status" -eq 0 ]
   [[ $output == *"/Applications/GitHub Desktop.app"* ]]
-  [[ $output != *"private copy"* ]]
-}
-
-@test "--own-icon is still accepted" {
-  need_app
-  write_config "$GOOD"
+  [[ $output == *"--env=GHDP_PROFILE=office"* ]]
   run main launch office --own-icon --dry-run
   [ "$status" -eq 0 ]
 }
 
-@test "app_to_open gives the copy when it works, and the normal app when it cannot be made" {
-  icon_setup
-  [ "$(app_to_open 0 "$APP")" = "$CD/GitHub Desktop.app" ]
-  # shellcheck disable=SC2329 # called by app_to_open, not by this test
-  make_profile_app() { die "Pretend problem." "Fix it."; }
-  run app_to_open 0 "$APP"
-  [ "$status" -eq 0 ]
-  [[ $output == *"opens with its normal icon"* ]]
-  [[ $output == *"$APP" ]]
-}
-
-@test "a problem with the icon never shows an error dialog or stops launching" {
-  icon_setup
-  # shellcheck disable=SC2329 # called by app_to_open, not by this test
-  show_dialog() { echo DIALOG >"$HOME/dialog"; }
-  # shellcheck disable=SC2329 # called by app_to_open, not by this test
-  make_profile_app() { die "Pretend problem." "Fix it."; }
-  GHDP_GUI=1 run app_to_open 0 "$APP"
-  [ "$status" -eq 0 ] && [ ! -e "$HOME/dialog" ]
+@test "each profile app only ever gets its own profile's identity and data folder" {
+  need_app
+  write_config "$GOOD"
+  local o p
+  o="$(main launch office --dry-run)"
+  p="$(main launch personal --dry-run)"
+  [[ $o == *"GIT_AUTHOR_EMAIL=1+ada-work@users.noreply.github.com"* ]]
+  [[ $o != *"ada@example.org"* ]]
+  [[ $o != *"desktop-data"*"personal"* ]]
+  [[ $p == *"GIT_AUTHOR_EMAIL=ada@example.org"* ]]
+  [[ $p != *"ada-work"* ]]
+  [[ $p == *"--user-data-dir=$(data_dir personal)"* ]]
 }

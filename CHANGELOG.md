@@ -5,6 +5,17 @@ All notable changes are listed here. This project follows
 
 ## [Unreleased]
 
+### Changed
+
+- One Dock icon per profile. The icon you pin is now the app that runs, so the
+  running dot shows on it and clicking it brings its window to the front.
+  Before, the launcher you pinned started a separate copy that got its own
+  second icon. Each profile app is a signed copy of GitHub Desktop at the same
+  place and with the same id as the old launcher, so existing Dock pins keep
+  working. The profile separation and the commit guard are unchanged.
+- The old hidden `~/Applications/.gh-desktop-profiles/` copies are removed.
+- macOS may ask once per profile app for Keychain access: choose Always Allow.
+
 ### Fixed
 
 - Quick setup no longer guesses which account your GitHub Desktop uses. Before,

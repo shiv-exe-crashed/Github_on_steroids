@@ -37,7 +37,7 @@ Every row below is handled on purpose. Almost all are covered by automated tests
 | Setup cancelled before you confirm | Nothing is written. |
 | A copy interrupted halfway | The partial copy never counts as profile data. |
 | GitHub Desktop still open while copying | Setup waits until it's closed, so the data is complete. |
-| A launcher clicked twice | No second window: the existing one comes to the front. |
+| A profile app clicked twice, or clicked while its window is hidden | No second window: the existing one comes to the front. |
 | 20 profiles | Still fast: settings load in about a second. |
 
 </details>

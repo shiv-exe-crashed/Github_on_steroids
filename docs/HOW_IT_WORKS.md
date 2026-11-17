@@ -23,8 +23,10 @@ is also per data folder:
 - Two profiles run side by side.
 - Opening the same profile twice just brings its window to the front.
 
-Nothing inside the official app is changed. Auto-update, code signing and
-everything else keep working as usual.
+Your installed GitHub Desktop is never changed. Each profile app is a copy of
+it with its own name, icon and start file, signed on your Mac (an ad-hoc
+signature, because GitHub's signature cannot cover a different icon). The
+copy is remade when GitHub Desktop updates or when any file in it changes.
 
 ## What a profile looks like on disk
 
@@ -38,7 +40,7 @@ everything else keep working as usual.
     ├── guard.rules          this profile's guard rules (made from profiles.json)
     └── hooks/               the wrong-account guard
 
-~/Applications/GitHub Desktop - <name>.app   one launcher per profile
+~/Applications/GitHub Desktop - <name>.app   one app per profile (a copy of GitHub Desktop)
 ```
 
 ## What happens when you click a launcher
@@ -48,7 +50,7 @@ flowchart LR
     A["Click<br/>GitHub Desktop - work"] --> B{"Safety checks"}
     B -- "any check fails" --> X["Stop and show<br/>a clear message"]
     B -- "all pass" --> C["Refresh Git identity<br/>and guard rules"]
-    C --> D["Open the official GitHub Desktop<br/>with this profile's folder"]
+    C --> D["Start GitHub Desktop's own program<br/>inside this same app, with this profile's folder"]
 ```
 
 The safety checks, in order:

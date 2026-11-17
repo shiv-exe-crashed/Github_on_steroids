@@ -17,7 +17,7 @@
 #   ghdp init                         create your profiles.json from the example
 #   ghdp install                      set up profile folders and launchers
 #   ghdp launch <name> [--dry-run]    open GitHub Desktop with a profile
-#   ghdp launch <name> --plain        open with GitHub Desktop's normal icon (no private copy)
+#   ghdp launch <name> --plain        open the normal GitHub Desktop (its own icon, no profile app)
 #   ghdp list                         show your profiles and their status
 #   ghdp allow <name> <owner/repo>    let a profile use one repo of another owner
 #   ghdp uninstall                    remove launchers (profile data: you choose)
@@ -191,15 +191,9 @@ gitconfig_path() {
   require_valid_name "$1"
   printf '%s/profiles/%s/gitconfig' "$(base_dir)" "$1"
 }
-# Where a profile's private copy of GitHub Desktop lives. It must sit inside a
-# folder called "Applications": GitHub Desktop asks "Move GitHub Desktop to the
-# Applications folder?" whenever it runs from anywhere else, and that question's
-# "Move and Restart" could replace the real app. The folder is hidden, so the
-# copies do not show up in Launchpad or Spotlight.
-app_copy_dir() {
-  require_valid_name "$1"
-  printf '%s/Applications/.gh-desktop-profiles/%s' "$HOME" "$1"
-}
+# Older versions kept a hidden private copy of GitHub Desktop here. It is only
+# cleaned up now (see remove_stale_app_copies).
+old_copies_dir() { printf '%s/Applications/.gh-desktop-profiles' "$HOME"; }
 launcher_path() {
   require_valid_name "$1"
   printf '%s/Applications/GitHub Desktop - %s.app' "$HOME" "$1"
@@ -514,14 +508,11 @@ app_signature_ok() {
     "$1" 2>/dev/null
 }
 
-# The same check for a profile's private copy of GitHub Desktop. The copy
-# carries a custom icon (macOS stores it as one extra file), which only the
-# "--strict" check refuses. Everything else is still sealed: a changed file,
-# a missing file or a different signer fails this check.
-copy_signature_ok() {
-  /usr/bin/codesign --verify --deep \
-    -R="anchor apple generic and identifier \"$GHD_BUNDLE_ID\" and certificate leaf[subject.OU] = \"$GHD_TEAM_ID\"" \
-    "$1" 2>/dev/null
+# A profile's app is a copy of GitHub Desktop that this tool signed itself (it
+# has to be: its start file and icon differ from GitHub's). Pass only if the
+# signature is intact: a changed, added or missing file fails this check.
+launcher_signature_ok() {
+  /usr/bin/codesign --verify --deep "$1" 2>/dev/null
 }
 
 # "3.6.11+1234": the version and build of an app, to see if a copy is out of date.
@@ -530,19 +521,6 @@ app_version() {
   v="$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - "$1/Contents/Info.plist" 2>/dev/null)" || return 0
   b="$(/usr/bin/plutil -extract CFBundleVersion raw -o - "$1/Contents/Info.plist" 2>/dev/null)" || return 0
   printf '%s+%s' "$v" "$b"
-}
-
-# Put a picture on an app as its icon, the way Finder does (Get Info). The
-# app's own files are not edited. Values are passed as arguments.
-set_custom_icon() {
-  /usr/bin/osascript -l JavaScript - "$1" "$2" >/dev/null 2>&1 <<'JXA'
-ObjC.import('AppKit');
-function run(argv) {
-  var img = $.NSImage.alloc.initWithContentsOfFile(argv[0]);
-  if (img.isNil()) { throw new Error('cannot read icon'); }
-  if (!$.NSWorkspace.sharedWorkspace.setIconForFileOptions(img, argv[1], 0)) { throw new Error('cannot set icon'); }
-}
-JXA
 }
 
 # Print the path of a verified GitHub Desktop, or stop.
@@ -961,23 +939,14 @@ remove_stale_guards() {
   done
 }
 
-# Private copies of GitHub Desktop whose profile is not in profiles.json any
-# more are removed (they are only copies; the profile's data is not touched).
-# Linked folders are never followed.
+# Older versions kept a hidden private copy of GitHub Desktop per profile. The
+# profile apps replaced them, so the whole folder is removed (they were only
+# copies; no profile data is in there). A link is never followed.
 remove_stale_app_copies() {
-  local root="$HOME/Applications/.gh-desktop-profiles" d base keep i
+  local root
+  root="$(old_copies_dir)"
   if [ -L "$root" ] || [ ! -d "$root" ]; then return 0; fi
-  for d in "$root"/*/; do
-    if [ -L "${d%/}" ] || [ ! -d "$d" ]; then continue; fi
-    base="$(/usr/bin/basename "$d")"
-    keep=0
-    i=0
-    while [ "$i" -lt "${#P_NAMES[@]}" ]; do
-      if [ "$(lower "${P_NAMES[$i]}")" = "$(lower "$base")" ]; then keep=1; fi
-      i=$((i + 1))
-    done
-    if [ "$keep" = "0" ]; then /bin/rm -rf "${d:?}"; fi
-  done
+  /bin/rm -rf "${root:?}"
 }
 
 # Copy this script to a fixed private place. Launchers run that copy, so a
@@ -995,41 +964,33 @@ install_self() {
   /bin/mv -f "$tmp" "$dst"
 }
 
-write_info_plist() {
-  /bin/cat >"$1" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleDisplayName</key><string>GitHub Desktop - $2</string>
-  <key>CFBundleExecutable</key><string>launch</string>
-  <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>CFBundleIdentifier</key><string>$3</string>
-  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>CFBundleName</key><string>GitHub Desktop - $2</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>$GHDP_VERSION</string>
-  <key>CFBundleVersion</key><string>1</string>
-  <key>LSMinimumSystemVersion</key><string>12.0</string>
-  <key>LSUIElement</key><true/>
-</dict>
-</plist>
-PLIST
+# Turn the copy of GitHub Desktop into this profile's own app: its own bundle
+# id (so the Dock treats it as a separate app, and old pins keep working), its
+# own name, our start file and our icon. $1 = Info.plist, $2 = name, $3 = id,
+# $4 = icon key.
+patch_info_plist() {
+  /usr/bin/plutil -replace CFBundleExecutable -string launch "$1" &&
+    /usr/bin/plutil -replace CFBundleIdentifier -string "$3" "$1" &&
+    /usr/bin/plutil -replace CFBundleDisplayName -string "GitHub Desktop - $2" "$1" &&
+    /usr/bin/plutil -replace CFBundleIconFile -string AppIcon "$1" &&
+    { /usr/bin/plutil -remove CFBundleIconName "$1" 2>/dev/null || true; } &&
+    /usr/bin/plutil -replace GHDPIconKey -string "$4" "$1"
 }
 
-# The launcher's only job: run the installed copy of this tool with a fixed
-# profile name. Name and paths were validated, so they are safe to write.
+# The profile app's start file: run the installed copy of this tool with a fixed
+# profile name. That copy checks everything, then starts GitHub Desktop's own
+# program in this same process (so the Dock icon you click is the running app).
+# Name and paths were validated, so they are safe to write.
 write_launch_script() {
   /bin/cat >"$1" <<SCRIPT
 #!/bin/bash
 # Made by gh-desktop-profiles. Opens GitHub Desktop with the "$2" profile.
 # To change it, edit profiles.json and run: ghdp install
-export GHDP_GUI=1
+export GHDP_GUI=1 GHDP_FROM_LAUNCHER=1
 exec /bin/bash "$3" launch "$2"
 SCRIPT
 }
 
-# Create (or refresh) "~/Applications/GitHub Desktop - <name>.app".
 # One badge color per profile position, so each launcher looks different.
 badge_color() {
   case $(($1 % 8)) in
@@ -1124,8 +1085,44 @@ remove_stale_launchers() {
   done < <(our_launchers)
 }
 
+# Letter and color of a profile's icon. Stored in the app, so a changed icon
+# (or a profile that moved in the list) makes the app again.
+launcher_key() {
+  local letter
+  letter="$(printf '%s' "${1:0:1}" | /usr/bin/tr '[:lower:]' '[:upper:]')"
+  printf '%s-%s' "$letter" "$(badge_color "$2")"
+}
+
+# True if the profile's app is complete and current: a real folder, our bundle
+# id and icon, the same GitHub Desktop version as the installed one, our start
+# file, and an intact signature. $1 = name, $2 = the verified GitHub Desktop,
+# $3 = the profile's position in the list.
+launcher_fresh() {
+  local name="$1" app="$2" index="$3" launcher id part
+  launcher="$(launcher_path "$name")" || exit 1
+  id="$TOOL_ID.$(norm_name "$name")"
+  for part in "" /Contents /Contents/MacOS /Contents/Resources "/Contents/MacOS/GitHub Desktop" /Contents/MacOS/launch; do
+    if [ -L "$launcher$part" ]; then return 1; fi
+  done
+  [ -d "$launcher" ] && [ -f "$launcher/Contents/MacOS/GitHub Desktop" ] || return 1
+  [ -f "$launcher/Contents/MacOS/launch" ] && [ -x "$launcher/Contents/MacOS/launch" ] || return 1
+  if writable_by_others "$launcher/Contents/MacOS/launch"; then return 1; fi
+  [ "$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$launcher/Contents/Info.plist" 2>/dev/null || true)" = "$id" ] || return 1
+  [ "$(/usr/bin/plutil -extract GHDPIconKey raw -o - "$launcher/Contents/Info.plist" 2>/dev/null || true)" = "$(launcher_key "$name" "$index")" ] || return 1
+  # GitHub's icon name would win over our badge icon, so it must be gone.
+  if /usr/bin/plutil -extract CFBundleIconName raw -o - "$launcher/Contents/Info.plist" >/dev/null 2>&1; then return 1; fi
+  [ "$(app_version "$launcher")" = "$(app_version "$app")" ] || return 1
+  [ "$(/bin/cat "$launcher/Contents/MacOS/launch")" = "$(write_launch_script /dev/stdout "$name" "$(bin_path)")" ] || return 1
+  launcher_signature_ok "$launcher"
+}
+
+# Create (or refresh) "~/Applications/GitHub Desktop - <name>.app": a copy of
+# GitHub Desktop that IS the profile's app. Pin this one in the Dock: the dot
+# shows on it while the profile runs, and clicking it brings its window to the
+# front. The copy is an APFS clone of the original (instant, no extra disk
+# space). The original app is never changed.
 make_launcher() {
-  local name="$1" app="$2" index="${3:-0}" apps launcher id icon letter
+  local name="$1" app="$2" index="${3:-0}" apps launcher id key tmp build
   apps="$HOME/Applications"
   if [ -L "$apps" ]; then die "\"$apps\" is a link, not a real folder." "Remove the link, then try again."; fi
   if [ ! -d "$apps" ]; then /bin/mkdir -m 755 "$apps"; fi
@@ -1136,38 +1133,39 @@ make_launcher() {
 
   launcher="$(launcher_path "$name")" || exit 1
   id="$TOOL_ID.$(norm_name "$name")"
+  key="$(launcher_key "$name" "$index")"
   if [ -e "$launcher" ] || [ -L "$launcher" ]; then
     if [ -L "$launcher" ] ||
       [ "$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$launcher/Contents/Info.plist" 2>/dev/null || true)" != "$id" ]; then
       die "\"$launcher\" already exists and was not made by this tool." "Rename or remove it, then run: ghdp install"
     fi
   fi
+  if launcher_fresh "$name" "$app" "$index"; then return 0; fi
 
-  # Never write through a planted link: every folder must be real (checked
-  # before anything is created), and old files are removed before new ones
-  # are written.
-  local part
-  for part in Contents Contents/MacOS Contents/Resources; do
-    if [ -L "$launcher/$part" ]; then die "\"$launcher/$part\" is a link." "Remove that launcher, then run: ghdp install"; fi
-  done
-  (
-    umask 077
-    /bin/mkdir -p "$launcher/Contents/MacOS" "$launcher/Contents/Resources"
-  )
-  /bin/rm -f "${launcher:?}/Contents/Info.plist" "${launcher:?}/Contents/MacOS/launch" \
-    "${launcher:?}/Contents/Resources/AppIcon.icns" "${launcher:?}/Contents/Resources/AppIcon.png"
-  (
-    umask 077
-    write_info_plist "$launcher/Contents/Info.plist" "$name" "$id"
-    write_launch_script "$launcher/Contents/MacOS/launch" "$name" "$(bin_path)"
-  )
-  icon="$app/Contents/Resources/electron.icns"
-  letter="$(printf '%s' "${name:0:1}" | /usr/bin/tr '[:lower:]' '[:upper:]')"
-  if [ -f "$icon" ] && ! make_badge_icon "$icon" "$launcher/Contents/Resources/AppIcon.icns" "$letter" "$(badge_color "$index")"; then
-    /bin/cp "$icon" "$launcher/Contents/Resources/AppIcon.icns" # plain icon if drawing fails
+  # Build the new app next to the old one in a private folder, then swap it in
+  # in one step. Nothing is written through a link: the build folder is new.
+  tmp="$(/usr/bin/mktemp -d "$apps/.ghdp-build.XXXXXX")" || die "Could not create a temporary folder in \"$apps\"." "Check the free space on your Mac, then try again."
+  /bin/chmod 700 "$tmp"
+  build="$tmp/GitHub Desktop.app"
+  if ! /bin/cp -c -R "$app" "$build"; then
+    /bin/rm -rf "${tmp:?}"
+    die "Could not make the app for \"$name\"." "This needs a Mac disk formatted as APFS (all recent Macs). Open the profile with --plain."
   fi
-  /bin/chmod -R go-rwx "$launcher"
-  /bin/chmod 700 "$launcher/Contents/MacOS/launch"
+  if ! {
+    patch_info_plist "$build/Contents/Info.plist" "$name" "$id" "$key" &&
+      write_launch_script "$build/Contents/MacOS/launch" "$name" "$(bin_path)" &&
+      /bin/chmod 700 "$build/Contents/MacOS/launch" &&
+      make_badge_icon "$app/Contents/Resources/electron.icns" "$build/Contents/Resources/AppIcon.icns" \
+        "${key%%-*}" "$(badge_color "$index")" &&
+      /usr/bin/codesign --force --deep --sign - "$build" >/dev/null 2>&1 &&
+      launcher_signature_ok "$build"
+  }; then
+    /bin/rm -rf "${tmp:?}"
+    die "Could not finish the app for \"$name\"." "Open the profile with --plain, and run: ghdp install"
+  fi
+  /bin/rm -rf "${launcher:?}"
+  /bin/mv "$build" "$launcher"
+  /bin/rm -rf "${tmp:?}"
   /usr/bin/touch "$launcher"
 }
 
@@ -1908,9 +1906,9 @@ cmd_uninstall() {
     /bin/rm -rf "${base:?}/bin"
     say "Removed the installed copy of this tool."
   fi
-  if [ -d "$HOME/Applications/.gh-desktop-profiles" ] && [ ! -L "$HOME/Applications/.gh-desktop-profiles" ]; then
+  if [ -d "$(old_copies_dir)" ] && [ ! -L "$(old_copies_dir)" ]; then
     /bin/rm -rf "${HOME:?}/Applications/.gh-desktop-profiles"
-    say "Removed the private copies of GitHub Desktop."
+    say "Removed the old private copies of GitHub Desktop."
   fi
   if [ -d "$base" ] && [ ! -L "$base" ]; then
     say ""
@@ -1937,67 +1935,9 @@ cmd_uninstall() {
   fi
 }
 
-# A private copy of GitHub Desktop for one profile, so the Dock can show the
-# profile's own icon (the running window belongs to whichever app file runs).
-# $1 = profile index, $2 = the verified original. The copy is an APFS clone of
-# the original (instant, no extra disk space) with a custom icon. It is made
-# again whenever it is missing, out of date (GitHub Desktop updated) or fails
-# the signature check. Prints the path of the copy.
-make_profile_app() {
-  local i="$1" app="$2" name pd dir copy key letter apps
-  name="${P_NAMES[$i]}"
-  pd="$(profile_dir "$name")" || exit 1
-  dir="$(app_copy_dir "$name")" || exit 1
-  apps="$HOME/Applications"
-  if [ -L "$apps" ]; then die "\"$apps\" is a link, not a real folder." "Remove the link, then try again."; fi
-  if [ ! -d "$apps" ]; then /bin/mkdir -m 755 "$apps"; fi
-  if writable_by_others "$apps"; then
-    die "\"$apps\" can be changed by other users, so a copy of GitHub Desktop there would not be safe." "Run: chmod go-w \"$apps\""
-  fi
-  ensure_private_dir "$(/usr/bin/dirname "$dir")"
-  ensure_private_dir "$dir"
-  # An older version kept the copy inside the profile folder: remove it.
-  if [ -L "$pd/app" ]; then /bin/rm -f "${pd:?}/app"; elif [ -d "$pd/app" ]; then /bin/rm -rf "${pd:?}/app"; fi
-  copy="$dir/GitHub Desktop.app"
-  letter="$(printf '%s' "${name:0:1}" | /usr/bin/tr '[:lower:]' '[:upper:]')"
-  key="$letter-$(badge_color "$i")"
-  if [ -L "$copy" ] || [ ! -d "$copy" ] || [ "$(app_version "$copy")" != "$(app_version "$app")" ] ||
-    [ "$(/bin/cat "$dir/icon.key" 2>/dev/null || true)" != "$key" ] || ! copy_signature_ok "$copy"; then
-    /bin/rm -rf "${copy:?}" "${dir:?}/badge.icns" "${dir:?}/icon.key"
-    /bin/cp -c -R "$app" "$copy" || die "Could not make a private copy of GitHub Desktop for \"$name\"." \
-      "This needs a Mac disk formatted as APFS (all recent Macs). Open the profile with --plain."
-    make_badge_icon "$app/Contents/Resources/electron.icns" "$dir/badge.icns" "$letter" "$(badge_color "$i")" ||
-      die "Could not draw the icon for \"$name\"." "Open the profile with --plain."
-    set_custom_icon "$dir/badge.icns" "$copy" || die "Could not put the icon on the copy for \"$name\"." \
-      "Open the profile with --plain."
-    printf '%s' "$key" >"$dir/icon.key"
-    if ! copy_signature_ok "$copy"; then
-      /bin/rm -rf "${copy:?}"
-      die "The private copy of GitHub Desktop failed the signature check, so it was removed." \
-        "Open the profile with --plain, and reinstall GitHub Desktop if this repeats."
-    fi
-  fi
-  printf '%s' "$copy"
-}
-
-# The app to open for a profile: its own private copy (own Dock icon), or the
-# normal GitHub Desktop if the copy cannot be made. The icon is a nicety, so a
-# problem with it must never stop GitHub Desktop from opening.
-app_to_open() {
-  local i="$1" app="$2" copy
-  if copy="$(
-    unset GHDP_GUI
-    make_profile_app "$i" "$app"
-  )" && [ -n "$copy" ]; then
-    printf '%s' "$copy"
-  else
-    tell "Could not make this profile's own Dock icon, so GitHub Desktop opens with its normal icon."
-    printf '%s' "$app"
-  fi
-}
-
 cmd_launch() {
-  local name="" dry=0 own=1 target arg i app gname gemail gc dd pd
+  local name="" dry=0 own=1 arg i app gname gemail gc dd pd launcher exe
+  local -a envs
   for arg in "$@"; do
     case "$arg" in
       --dry-run) dry=1 ;;
@@ -2023,34 +1963,63 @@ cmd_launch() {
   gc="$(gitconfig_path "$name")" || exit 1
   dd="$(data_dir "$name")" || exit 1
   pd="$(profile_dir "$name")" || exit 1
+  launcher="$(launcher_path "$name")" || exit 1
+  exe="$launcher/Contents/MacOS/GitHub Desktop"
 
-  # Fixed arguments only. The settings below reach only this GitHub Desktop
-  # (not your shell, not other apps). GIT_AUTHOR_* and GIT_COMMITTER_* beat
-  # every Git config file, so commits always use this profile's identity.
-  # GIT_CONFIG_* points Git at this profile's guard hooks (see above).
-  target="$app"
-  if [ "$own" = "1" ]; then target="$(app_copy_dir "$name")/GitHub Desktop.app"; fi
-  set -- /usr/bin/open -n -a "$target" \
-    --env "GIT_CONFIG_GLOBAL=$gc" \
-    --env "GIT_AUTHOR_NAME=$gname" --env "GIT_AUTHOR_EMAIL=$gemail" \
-    --env "GIT_COMMITTER_NAME=$gname" --env "GIT_COMMITTER_EMAIL=$gemail" \
-    --env "GHDP_PROFILE=$name" \
-    --env "GIT_CONFIG_COUNT=1" --env "GIT_CONFIG_KEY_0=core.hooksPath" --env "GIT_CONFIG_VALUE_0=$pd/hooks" \
-    --args "--user-data-dir=$dd"
+  # Fixed settings only. They reach only this GitHub Desktop (not your shell,
+  # not other apps). GIT_AUTHOR_* and GIT_COMMITTER_* beat every Git config
+  # file, so commits always use this profile's identity. GIT_CONFIG_* points
+  # Git at this profile's guard hooks (see above).
+  envs=(
+    "GIT_CONFIG_GLOBAL=$gc"
+    "GIT_AUTHOR_NAME=$gname" "GIT_AUTHOR_EMAIL=$gemail"
+    "GIT_COMMITTER_NAME=$gname" "GIT_COMMITTER_EMAIL=$gemail"
+    "GHDP_PROFILE=$name"
+    "GIT_CONFIG_COUNT=1" "GIT_CONFIG_KEY_0=core.hooksPath" "GIT_CONFIG_VALUE_0=$pd/hooks"
+  )
 
   if [ "$dry" = "1" ]; then
     say "Dry run: all checks passed. GitHub Desktop was not opened. This would run:"
-    printf '  %s\n' "$@"
-    if [ "$own" = "1" ]; then say "(A private copy of GitHub Desktop with this profile's icon would be made there.)"; fi
+    if [ "$own" = "1" ]; then
+      printf '  %s\n' "$exe" "--user-data-dir=$dd" "with these settings:" "${envs[@]}"
+      say "(The profile's own app is made again first if it is missing or out of date.)"
+    else
+      printf '  %s\n' /usr/bin/open -n -a "$app" "${envs[@]/#/--env=}" --args "--user-data-dir=$dd"
+    fi
     return 0
   fi
   prepare_profile "$i" "$app"
   remove_stale_guards
-  if [ "$own" = "1" ]; then
-    target="$(app_to_open "$i" "$app")"
-    set -- "$1" "$2" "$3" "$target" "${@:5}"
+
+  if [ "$own" = "0" ]; then
+    set -- /usr/bin/open -n -a "$app"
+    for arg in "${envs[@]}"; do set -- "$@" --env "$arg"; done
+    "$@" --args "--user-data-dir=$dd" ||
+      die "GitHub Desktop could not be started." "Try again. If it keeps failing, reinstall GitHub Desktop from https://desktop.github.com."
+    return 0
   fi
-  "$@" || die "GitHub Desktop could not be started." "Try again. If it keeps failing, reinstall GitHub Desktop from https://desktop.github.com."
+
+  if [ "${GHDP_FROM_LAUNCHER:-}" = "1" ]; then
+    # Started from the profile's own app (the Dock icon). If that app is out of
+    # date or damaged (GitHub Desktop updated, a file changed), make it again
+    # and start the new one in its place.
+    if ! launcher_fresh "$name" "$app" "$i"; then
+      make_launcher "$name" "$app" "$i"
+      launcher_fresh "$name" "$app" "$i" || die "The app for \"$name\" could not be made." "Run: ghdp install"
+      exec /usr/bin/open -n "$launcher"
+    fi
+    # Start GitHub Desktop's own program in THIS process: the app you clicked
+    # is the app that runs, so the Dock puts its dot on that very icon.
+    unset GHDP_FROM_LAUNCHER GHDP_GUI
+    for arg in "${envs[@]}"; do export "${arg?}"; done
+    exec "$exe" "--user-data-dir=$dd"
+  fi
+
+  # Started from Terminal: make sure the profile's app is current, then open
+  # it the way a click would (an app that is already open just comes forward).
+  make_launcher "$name" "$app" "$i"
+  /usr/bin/open "$launcher" ||
+    die "GitHub Desktop could not be started." "Try again. If it keeps failing, reinstall GitHub Desktop from https://desktop.github.com."
 }
 
 cmd_list() {
